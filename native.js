@@ -609,14 +609,150 @@
 
   var player = null, spec = null, idx = 0, currentId = null, saveTimer = 0;
 
+  // A computer (mouse) gets yamDRIVE's own controls; touch screens keep the browser's, which
+  // know their full screen and gestures best.
+  var DESK = matchMedia('(hover: hover) and (pointer: fine)').matches;
+  function svg(d) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + d + '</svg>'; }
+  var LINE = 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+  var I = {
+    play: svg('<path d="M7 4.5v15l12.5-7.5z"/>'),
+    pause: svg('<path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z"/>'),
+    prev: svg('<path d="M6 5h2.2v14H6zM19.5 5v14L9.5 12z"/>'),
+    next: svg('<path d="M15.8 5H18v14h-2.2zM4.5 5v14l10-7z"/>'),
+    back: svg('<path d="M12 4.5V1.8L7.5 5.4 12 9V6.5a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/><text x="12" y="16" font-size="6.6" font-weight="700" text-anchor="middle" font-family="sans-serif">10</text>'),
+    fwd: svg('<path d="M12 4.5V1.8l4.5 3.6L12 9V6.5a6 6 0 1 0 6 6h2a8 8 0 1 1-8-8z"/><text x="12" y="16" font-size="6.6" font-weight="700" text-anchor="middle" font-family="sans-serif">10</text>'),
+    vol: svg('<path d="M3.5 9v6h4l5 4V5l-5 4z"/><path ' + LINE + ' d="M16 8.5a5 5 0 0 1 0 7M18.6 6a8.5 8.5 0 0 1 0 12"/>'),
+    mute: svg('<path d="M3.5 9v6h4l5 4V5l-5 4z"/><path ' + LINE + ' d="M16.5 9.5l5 5M21.5 9.5l-5 5"/>'),
+    pip: svg('<rect ' + LINE + ' x="2.5" y="4.5" width="19" height="15" rx="2"/><rect x="12" y="11.5" width="7" height="5.5" rx="1"/>'),
+    full: svg('<path ' + LINE + ' d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
+    unfull: svg('<path ' + LINE + ' d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>')
+  };
+  var CONTROLS = '<div class="pctl"><div class="pseek"><input type="range" class="pslider" min="0" max="1000" step="1" value="0" aria-label="Seek"><div class="ptip"></div></div>' +
+    '<div class="prow">' +
+    '<button class="pb pprev2" title="Previous episode (Shift+P)">' + I.prev + '</button>' +
+    '<button class="pb pplay" title="Play / pause (Space)">' + I.play + '</button>' +
+    '<button class="pb pback" title="Back 10 seconds (←)">' + I.back + '</button>' +
+    '<button class="pb pfwd" title="Forward 10 seconds (→)">' + I.fwd + '</button>' +
+    '<button class="pb pnext2" title="Next episode (Shift+N)">' + I.next + '</button>' +
+    '<button class="pb pmute" title="Mute (M)">' + I.vol + '</button>' +
+    '<input type="range" class="pvol" min="0" max="1" step="0.05" aria-label="Volume" title="Volume (↑ ↓)">' +
+    '<span class="ptime">0:00 / 0:00</span><span class="pfill"></span>' +
+    '<span class="pq" title="Google Drive plays the original file; this is its quality"></span>' +
+    '<button class="pb pspeed" title="Playback speed">1×</button>' +
+    '<button class="pb ppip" title="Picture in picture">' + I.pip + '</button>' +
+    '<button class="pb pfs" title="Full screen (F)">' + I.full + '</button></div></div>';
+
+  function clock(s) {
+    s = Math.max(0, Math.floor(s || 0));
+    var h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60;
+    return (h ? h + ':' + (m < 10 ? '0' : '') : '') + m + ':' + (x < 10 ? '0' : '') + x;
+  }
+
+  // The computer controls: seek bar (with what is loaded, and the time under the mouse), play,
+  // ±10 s, episodes, volume, time, the file's quality, speed, picture in picture, full screen,
+  // and the keyboard (Space/K, ←/→ or J/L, ↑/↓, M, F, Shift+N/P, 0-9).
+  function desk(p) {
+    var w = p.wrap, v = p.v, q = function (s) { return w.querySelector(s); };
+    var seek = q('.pslider'), tip = q('.ptip'), vol = q('.pvol'), time = q('.ptime'), qual = q('.pq');
+    var playB = q('.pplay'), muteB = q('.pmute'), speedB = q('.pspeed'), fsB = q('.pfs'), pipB = q('.ppip');
+    var SPEEDS = [1, 1.25, 1.5, 2, 0.5, 0.75], dragging = false;
+    p.ctl = q('.pctl');
+    p.next2 = q('.pnext2');
+    p.prev2 = q('.pprev2');
+
+    function step(s) { if (v.duration) v.currentTime = Math.max(0, Math.min(v.duration - 0.5, v.currentTime + s)); p.wake(); }
+    function toggle() { if (v.paused) v.play(); else v.pause(); }
+    function full() { if (document.fullscreenElement) document.exitFullscreen(); else w.requestFullscreen().catch(function () {}); }
+    function setVol(x) { v.volume = Math.max(0, Math.min(1, x)); v.muted = v.volume === 0; }
+    function paint() {
+      var d = v.duration || 0, t = v.currentTime || 0, b = 0;
+      for (var i = 0; i < v.buffered.length; i++) if (v.buffered.start(i) <= t + 1) b = Math.max(b, v.buffered.end(i));
+      if (!dragging) seek.value = d ? Math.round(t / d * 1000) : 0;
+      seek.style.setProperty('--p', seek.value / 10 + '%');
+      seek.style.setProperty('--b', (d ? b / d * 100 : 0) + '%');
+      time.textContent = clock(dragging ? seek.value / 1000 * d : t) + ' / ' + clock(d);
+    }
+    function paintVol() {
+      vol.value = v.muted ? 0 : v.volume;
+      vol.style.setProperty('--p', vol.value * 100 + '%');
+      muteB.innerHTML = v.muted || !v.volume ? I.mute : I.vol;
+      ls.set('volume', JSON.stringify({ v: v.volume, m: v.muted }));
+    }
+
+    // Buttons never keep the keyboard (Space would press them again).
+    w.addEventListener('mousedown', function (e) { if (e.target.closest('.pctl button')) e.preventDefault(); });
+    playB.onclick = toggle;
+    q('.pback').onclick = function () { step(-10); };
+    q('.pfwd').onclick = function () { step(10); };
+    p.next2.onclick = function () { p.next.onclick(); };
+    p.prev2.onclick = function () { p.prev.onclick(); };
+    muteB.onclick = function () { v.muted = !v.muted; if (!v.muted && !v.volume) v.volume = 0.5; };
+    vol.oninput = function () { setVol(+vol.value); };
+    speedB.onclick = function () {
+      v.playbackRate = SPEEDS[(SPEEDS.indexOf(v.playbackRate) + 1) % SPEEDS.length];
+      speedB.textContent = v.playbackRate + '×';
+    };
+    fsB.onclick = full;
+    if (document.pictureInPictureEnabled) {
+      pipB.onclick = function () { (document.pictureInPictureElement ? document.exitPictureInPicture() : v.requestPictureInPicture()).catch(function () {}); };
+    } else pipB.style.display = 'none';
+    v.addEventListener('click', toggle);
+    v.addEventListener('dblclick', full);
+
+    // Seek bar: the picture moves when the mouse is let go (each jump is a new Drive request).
+    seek.addEventListener('pointerdown', function () { dragging = true; });
+    seek.addEventListener('input', paint);
+    seek.addEventListener('change', function () {
+      dragging = false;
+      if (v.duration) v.currentTime = seek.value / 1000 * v.duration;
+    });
+    seek.addEventListener('mousemove', function (e) {
+      var r = seek.getBoundingClientRect(), f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+      tip.textContent = clock(f * (v.duration || 0));
+      tip.style.left = f * 100 + '%';
+    });
+
+    ['timeupdate', 'progress', 'durationchange', 'seeked'].forEach(function (n) { v.addEventListener(n, paint); });
+    v.addEventListener('play', function () { playB.innerHTML = I.pause; });
+    v.addEventListener('pause', function () { playB.innerHTML = I.play; });
+    v.addEventListener('volumechange', paintVol);
+    v.addEventListener('ratechange', function () { speedB.textContent = v.playbackRate + '×'; });
+    v.addEventListener('loadedmetadata', function () {
+      var h = v.videoHeight;
+      qual.textContent = !h ? '' : h >= 2000 ? '4K' : h >= 1400 ? '1440p' : h >= 1000 ? '1080p' : h >= 700 ? '720p' : h + 'p';
+    });
+    document.addEventListener('fullscreenchange', function () { fsB.innerHTML = document.fullscreenElement ? I.unfull : I.full; });
+
+    try { var sv = JSON.parse(ls.get('volume') || 'null'); if (sv) { v.volume = sv.v; v.muted = sv.m; } } catch (e) { /* default */ }
+    paintVol();
+
+    window.addEventListener('keydown', function (e) {
+      if (w.style.display !== 'flex' || e.ctrlKey || e.metaKey || e.altKey) return;
+      var k = e.key, done = true;
+      if (k === ' ' || k === 'k' || k === 'K') toggle();
+      else if (k === 'ArrowLeft' || k === 'j' || k === 'J') step(-10);
+      else if (k === 'ArrowRight' || k === 'l' || k === 'L') step(10);
+      else if (k === 'ArrowUp') setVol(v.volume + 0.1);
+      else if (k === 'ArrowDown') setVol(v.volume - 0.1);
+      else if (k === 'm' || k === 'M') muteB.onclick();
+      else if (k === 'f' || k === 'F') full();
+      else if (k === 'N' && e.shiftKey) p.next.onclick();
+      else if (k === 'P' && e.shiftKey) p.prev.onclick();
+      else if (/^[0-9]$/.test(k) && v.duration) v.currentTime = v.duration * k / 10;
+      else done = false;
+      if (done) { e.preventDefault(); e.stopPropagation(); p.wake(); }
+    }, true);
+  }
+
   function playerEl() {
     if (player) return player;
     var wrap = document.createElement('div');
     wrap.id = 'player';
+    if (DESK) wrap.className = 'desk';
     wrap.innerHTML = '<div class="pbar"><div class="ptitle"></div>' +
       '<button class="pnav pprev">‹ Previous</button><button class="pnav pnext">Next episode ›</button>' +
       '<button class="pclose" aria-label="Close">✕</button></div>' +
-      '<video playsinline controls autoplay preload="auto"></video>';
+      '<video playsinline ' + (DESK ? '' : 'controls ') + 'autoplay preload="auto"></video>' + (DESK ? CONTROLS : '');
     document.body.appendChild(wrap);
     player = {
       wrap: wrap, v: wrap.querySelector('video'), title: wrap.querySelector('.ptitle'),
@@ -637,7 +773,9 @@
     player.wake = function () {
       wrap.classList.remove('idle');
       clearTimeout(hideTimer);
-      hideTimer = setTimeout(function () { if (!player.v.paused) wrap.classList.add('idle'); }, 3000);
+      hideTimer = setTimeout(function () {
+        if (!player.v.paused && !(player.ctl && player.ctl.matches(':hover'))) wrap.classList.add('idle');
+      }, 3000);
     };
     wrap.addEventListener('touchstart', player.wake, { passive: true });
     wrap.addEventListener('click', player.wake);
@@ -646,6 +784,7 @@
     player.v.addEventListener('pause', player.wake);
     player.v.addEventListener('ended', onEnded);
     player.v.addEventListener('error', onError);
+    if (DESK) desk(player);
     return player;
   }
 
@@ -656,6 +795,10 @@
     p.title.textContent = it.title.replace('\n', ' · ');
     p.next.style.display = i < spec.items.length - 1 ? '' : 'none';
     p.prev.style.display = i > 0 ? '' : 'none';
+    if (p.next2) {
+      p.next2.style.display = p.next.style.display;
+      p.prev2.style.display = p.prev.style.display;
+    }
     p.wake();
     p.v.src = it.url;
     if (startSec > 0) {
@@ -828,7 +971,7 @@
     loadCatalog: function (root, force) {
       load(root, force).then(function () { tell('onCatalog', true, ''); }, function (e) { tell('onCatalog', false, errText(e)); });
     },
-    build: 11, // shown in Settings > About, to tell an old copy kept by Safari from the current one
+    build: 12, // shown in Settings > About, to tell an old copy kept by Safari from the current one
     syncStatus: function () { return ls.get('syncStatus') || ''; },
     api: api,
     url: function (id) { var f = fileOf[id]; return f ? 'stream/' + f.f + '?size=' + f.s : ''; },
