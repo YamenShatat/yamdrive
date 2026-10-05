@@ -447,8 +447,38 @@
   // Who's watching: pick a username or create one. No password: it is for friends who share a
   // library. Each name's data is a file in the library's "Luma users" folder in Drive.
   var pendingUser = null;
+
+  // The names this device has logged in to, per library, newest first. Switch user offers only
+  // these: the other names in Drive are never listed.
+  var seen = store.get('seenUsers', {}) || {};
+  function seenHere() { return (acct && seen[acct.root]) || []; }
+  function remember(name, drop) {
+    if (!acct) return;
+    var l = seenHere().filter(function (n) { return n !== name && n !== drop; });
+    if (name) l.unshift(name);
+    seen[acct.root] = l;
+    store.set('seenUsers', seen);
+  }
+  if (user) remember(user);
+  ACTS.uswitch = function () {
+    var names = seenHere(), opts = [];
+    each(names, function (n, i) { opts.push({ v: i, t: n === user ? n + ' (now)' : n }); });
+    opts.push({ v: -1, t: 'Another user…' });
+    pick('Switch user', opts, names.indexOf(user), function (i) {
+      if (i < 0) { show('who', null, null); return; }
+      if (names[i] === user) return;
+      toast('Switching to ' + names[i] + '…');
+      chooseUser(names[i], false); // sends this user's last changes first
+    });
+  };
+  ACTS.uquick = function (el) { chooseUser(el.getAttribute('data-n'), false); };
+
   VIEWS.who = function (a, r) {
+    var mine = seenHere().filter(function (n) { return n !== user; });
     main.innerHTML = head('Log in', 'Enter your username. What you watch follows it to any device.') +
+      (mine.length ? '<h2>On this device</h2><div class="chips">' + mine.map(function (n) {
+        return '<button class="f chip" data-act="uquick" data-n="' + esc(n) + '">' + ic('user') + esc(n) + '</button>';
+      }).join('') + '</div>' : '') +
       '<div class="panel who">' +
       '<div class="box">' + ic('user') + '<input class="f" id="uname" type="text" maxlength="24" placeholder="Username" autocomplete="off" spellcheck="false"></div>' +
       '<div class="err" id="uerr">&nbsp;</div>' +
@@ -818,6 +848,7 @@
         '<div class="u">Continue watching, favorites and watch later follow this name to any device.</div>' +
         '<div class="u" id="syncline">Last sync: ' + esc(N.syncStatus ? N.syncStatus() || 'not yet' : 'not yet') + '</div></div></div>' +
         '<button class="f btn" data-act="syncnow">' + ic('refresh') + 'Sync now</button>' +
+        '<button class="f btn" data-act="uswitch">' + ic('user') + 'Switch user</button>' +
         '<div class="rename"><div class="box">' + ic('user') + '<input class="f" id="rname" type="text" maxlength="24" value="' + esc(user) + '" autocomplete="off" spellcheck="false"></div>' +
         '<button class="f btn" data-act="urename">Change username</button></div><div class="err" id="rerr">&nbsp;</div>' : '') +
       '<button class="f btn" data-act="ulogout">' + ic('logout') + 'Log out</button>' +
@@ -961,7 +992,7 @@
       '<button class="f nav search-btn" data-go="search">' + ic('search') + 'Search</button>';
     each(NAV, function (n) { h += '<button class="f nav" data-go="' + n[0] + '">' + ic(n[2]) + n[1] + '</button>'; });
     h += '<div class="side-fill"></div>';
-    if (acct && user) h += '<button class="f nav provider" data-go="settings"><span class="xt">' + esc(user.charAt(0).toUpperCase()) + '</span><span class="name">' + esc(user) + '</span>' + ic('chev') + '</button>';
+    if (acct && user) h += '<button class="f nav provider" data-act="uswitch" title="Switch user"><span class="xt">' + esc(user.charAt(0).toUpperCase()) + '</span><span class="name">' + esc(user) + '</span>' + ic('chev') + '</button>';
     h += '<div class="side-sep"></div><button class="f nav" data-go="settings">' + ic('settings') + 'Settings</button>';
     side.innerHTML = h;
     each(side.querySelectorAll('.nav'), function (el) {
@@ -1049,6 +1080,7 @@
     onDeleteUser: function (ok, msg) {
       if (!ok) { toast('Could not delete: ' + msg); return; }
       toast(user + ' was deleted');
+      remember(null, user);
       user = null;
       reloadUserData();
       renderSide();
@@ -1057,6 +1089,7 @@
     },
     onRename: function (ok, msg) {
       if (!ok) { var e = $('#rerr'); if (e) e.textContent = msg; else toast(msg); return; }
+      remember(pendingUser, user);
       user = pendingUser;
       renderSide();
       if (cur.v === 'settings') show('settings', null, null);
@@ -1071,6 +1104,7 @@
       }
       var switched = user !== pendingUser;
       user = pendingUser;
+      remember(user);
       reloadUserData();
       renderSide();
       if (switched || cur.v === 'who') { hist = []; show('home', null, null); }
