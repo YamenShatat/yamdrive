@@ -1,6 +1,7 @@
 // Adds the Google sign-in to what <video> and <img> cannot send it for:
 //   stream/<file id>?size=<bytes>  a Drive video, answered the way Safari's player expects
-//                                  (206, exact Content-Range and Content-Length);
+//                                  (206, exact Content-Range and Content-Length; Chrome and
+//                                  Brave take the same);
 //   poster/<file id>               a poster image from the library folder, kept in a cache.
 // The page sends the token (native.js toWorker); it is also kept in this worker's cache, since
 // the phone stops idle workers and that would lose it mid-video.
@@ -52,7 +53,8 @@ function stream(id, size, range) {
     return new Response(res.body, {
       status: range ? 206 : 200,
       headers: {
-        'Content-Type': 'video/mp4',
+        // Drive's own type for the file: Chrome and Brave also play MKV and WebM this way.
+        'Content-Type': /^video\//.test(res.headers.get('Content-Type') || '') ? res.headers.get('Content-Type') : 'video/mp4',
         'Accept-Ranges': 'bytes',
         'Content-Length': String(end - start + 1),
         'Content-Range': 'bytes ' + start + '-' + end + '/' + size

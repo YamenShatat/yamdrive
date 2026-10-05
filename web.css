@@ -1,6 +1,7 @@
-/* Luma Drive on the web. app.css is the Android app's, for a 1280px landscape page; this adds
-   what the app drew natively there (the page background, the player, the sign-in box) and the
-   iPhone's safe areas (notch, home bar). The phone layout is in app.css, shared with Android. */
+/* yamDRIVE on the web: Safari on iPhone, Chrome and Brave on Windows and Android. app.css is the
+   Android app's, for a 1280px landscape page; this adds what the app drew natively there (the
+   page background, the player, the sign-in box), the iPhone's safe areas (notch, home bar) and
+   what a mouse needs. The phone layout is in app.css, shared with Android. */
 
 html { background: var(--bg); }
 /* Safari on iPhone enlarges text in some blocks by itself; the design sets every size. */
@@ -13,6 +14,23 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
 }
 /* Safari zooms into any text field under 16px; keep them at 16. */
 .box input, .bigsearch input { font-size: 16px; }
+
+/* A mouse cannot swipe: show thin scrollbars (app.css hides them for touch), so the poster
+   rows can be scrolled sideways on a computer. Touch screens keep none. */
+@media (hover: hover) and (pointer: fine) {
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--line); }
+  ::-webkit-scrollbar-track { background: transparent; }
+  .card { cursor: pointer; }
+}
+
+/* Big monitors: as many posters a row as fit, instead of always five huge ones. */
+@media (min-width: 1500px) and (min-height: 501px) {
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); column-gap: 16px; }
+  .grid .card, .grid .card:nth-child(5n) { width: auto; margin: 0 0 18px; }
+  .grid > :not(.card) { grid-column: 1 / -1; }
+}
 
 /* ---- player: Safari's own video, on a black page with the title and a close button ---- */
 #player { display: none; position: fixed; left: 0; top: 0; right: 0; bottom: 0; z-index: 40; background: #000; flex-direction: column; }

@@ -1,4 +1,5 @@
-/* Luma Drive on the web (Safari on iPhone, added to the Home Screen).
+/* yamDRIVE on the web: Safari on iPhone (added to the Home Screen), Chrome and Brave on Windows
+   and Android.
    The page (app.js) is the Android app's own; this file does in the browser what MainActivity,
    Drive.java, Tmdb.java and Catalog.java do there, behind the same window.Native calls. Videos
    and Drive posters go through sw.js, which adds the Google sign-in a <video>/<img> cannot send. */
@@ -48,9 +49,16 @@
     navigator.serviceWorker.ready.then(function (r) { if (r.active) r.active.postMessage(token); });
   }
 
+  // Google's script (index.html). A blocker (Brave Shields, an ad blocker) can stop it loading:
+  // say so instead of waiting forever.
   function gisLoaded() {
-    return new Promise(function (res) {
-      (function poll() { if (window.google && google.accounts && google.accounts.oauth2) res(); else setTimeout(poll, 50); })();
+    var until = Date.now() + 15000;
+    return new Promise(function (res, rej) {
+      (function poll() {
+        if (window.google && google.accounts && google.accounts.oauth2) res();
+        else if (Date.now() > until) rej(new Error('Google sign-in did not load. In Brave, turn Shields off for this site (the lion icon); with an ad blocker, allow this site. Then reload the page.'));
+        else setTimeout(poll, 50);
+      })();
     });
   }
   // Google's sign-in window; the first time it asks for the account and consent, later it is a blink.
@@ -633,6 +641,7 @@
     };
     wrap.addEventListener('touchstart', player.wake, { passive: true });
     wrap.addEventListener('click', player.wake);
+    wrap.addEventListener('mousemove', player.wake);
     player.v.addEventListener('play', player.wake);
     player.v.addEventListener('pause', player.wake);
     player.v.addEventListener('ended', onEnded);
@@ -752,6 +761,40 @@
     serial(function () { return syncUser(true, true); });
   });
 
+  // A phone in Chrome or Brave: a video in full screen turns sideways (Android allows it only
+  // in full screen; elsewhere the lock is refused, which is fine).
+  document.addEventListener('fullscreenchange', function () {
+    var o = screen.orientation;
+    if (!o || !o.lock) return;
+    if (document.fullscreenElement) o.lock('landscape').catch(function () { /* not a phone */ });
+    else if (o.unlock) o.unlock();
+  });
+
+  // The phone's Back button, the browser's Back and Esc: the app's own Back (close the video,
+  // then the dialog, then the page) instead of leaving the site. A spare history entry catches
+  // Back. It is only ever added right after a tap or a key: Chrome treats an entry a page adds
+  // by itself as a trap and makes Back skip the page's own entry, leaving the site. (A finger
+  // counts as a tap when it lifts, so "click", not "pointerdown"; Esc does not count at all.)
+  var spare = false;
+  function addSpare() {
+    if (spare) return;
+    spare = true;
+    history.pushState({ yamdrive: 1 }, '');
+  }
+  function back() {
+    if (player && player.wrap.style.display === 'flex') stop();
+    else if (window.App) App.back();
+  }
+  window.addEventListener('click', addSpare, true);
+  window.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') addSpare();
+    else if (!document.fullscreenElement) back();
+  }, true);
+  window.addEventListener('popstate', function () {
+    spare = false; // used up; the next tap adds it again
+    back();
+  });
+
   // A Home Screen app can also come back restored from memory, without a visibility change.
   window.addEventListener('pageshow', function (e) {
     if (e.persisted && window.App && App.onResume) App.onResume();
@@ -762,7 +805,9 @@
   window.Native = {
     play: play,
     stop: stop,
-    exit: function () { /* a web page cannot close itself */ },
+    // "Exit yamDRIVE?" → Yes: leave the site, back to the page before it (a page cannot close
+    // its own tab). Two steps: the spare entry, then the app's own.
+    exit: function () { spare = true; history.go(-2); },
     toast: function () { /* app.js shows its own */ },
     get: function (k) { return ls.get(k); },
     set: function (k, v) {
@@ -783,7 +828,7 @@
     loadCatalog: function (root, force) {
       load(root, force).then(function () { tell('onCatalog', true, ''); }, function (e) { tell('onCatalog', false, errText(e)); });
     },
-    build: 10, // shown in Settings > About, to tell an old copy kept by Safari from the current one
+    build: 11, // shown in Settings > About, to tell an old copy kept by Safari from the current one
     syncStatus: function () { return ls.get('syncStatus') || ''; },
     api: api,
     url: function (id) { var f = fileOf[id]; return f ? 'stream/' + f.f + '?size=' + f.s : ''; },
