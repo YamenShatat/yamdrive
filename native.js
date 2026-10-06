@@ -971,7 +971,7 @@
     loadCatalog: function (root, force) {
       load(root, force).then(function () { tell('onCatalog', true, ''); }, function (e) { tell('onCatalog', false, errText(e)); });
     },
-    build: 13, // shown in Settings > About, to tell an old copy kept by Safari from the current one
+    build: 14, // shown in Settings > About, to tell an old copy kept by Safari from the current one
     syncStatus: function () { return ls.get('syncStatus') || ''; },
     api: api,
     url: function (id) { var f = fileOf[id]; return f ? 'stream/' + f.f + '?size=' + f.s : ''; },
