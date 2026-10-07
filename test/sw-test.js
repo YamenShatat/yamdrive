@@ -78,29 +78,47 @@ function expected(range) {
   assert.strictEqual(calls.length, 0, 'second read asked Drive ' + calls.length + ' times');
   console.log('ok second read from the cache: 0 Drive requests');
 
-  // Two reads at once of the same part: each block downloaded once.
+  // One plain read from Drive is one Drive request (no block-by-block downloads).
   stores['luma-video'] = new Map();
   calls = [];
-  const [a, b] = await Promise.all([request('bytes=0-'), request('bytes=0-')]);
-  await Promise.all([a.arrayBuffer(), b.arrayBuffer()]);
-  const blocks = calls.map((c) => c[0]);
-  assert.strictEqual(new Set(blocks).size, blocks.length, 'a block downloaded twice');
-  console.log('ok two reads at once:', calls.length, 'Drive requests for', Math.ceil(SIZE / 1048576), 'blocks');
-
-  // Only the newest KEEP blocks are kept.
-  await settle();
-  vm.runInContext('KEEP = 3', ctx);
-  stores['luma-video'] = new Map();
   await (await request('bytes=0-')).arrayBuffer();
+  assert.strictEqual(calls.length, 1, 'a read from Drive made ' + calls.length + ' requests');
+  console.log('ok a read from Drive is one Drive request');
   await settle();
-  assert.ok(stores['luma-video'].size <= 3, 'kept ' + stores['luma-video'].size);
+  assert.strictEqual(stores['luma-video'].size, Math.ceil(SIZE / 1048576), 'blocks kept');
+
+  // Kept start, missing rest: the kept part from the cache, then one Drive request for the rest.
+  const keepFirst = new Map([...stores['luma-video']].slice(0, 2));
+  stores['luma-video'] = keepFirst;
+  calls = [];
+  const mixed = Buffer.from(await (await request('bytes=500000-')).arrayBuffer());
+  assert.ok(mixed.equals(data.subarray(500000)), 'kept + Drive bytes match');
+  assert.deepStrictEqual(calls, [[2 * 1048576, SIZE - 1]], 'Drive asked for ' + JSON.stringify(calls));
+  console.log('ok kept blocks first, then one Drive request from', calls[0][0]);
+
+  // A block the stream joined halfway is not kept; the whole ones after it are.
+  stores['luma-video'] = new Map();
+  await (await request('bytes=1048570-')).arrayBuffer();
+  await settle();
+  const keys = [...stores['luma-video'].keys()];
+  assert.ok(!keys.includes('/vblock/FILE1/0') && keys.includes('/vblock/FILE1/1'), 'kept ' + keys);
+  console.log('ok a half block is not kept:', keys.length, 'blocks kept');
+
+  // Only the newest KEEP blocks stay.
+  vm.runInContext('KEEP = 3', ctx);
+  await vm.runInContext('caches.open("luma-video").then(trim)', ctx);
+  assert.strictEqual(stores['luma-video'].size, 3, 'kept ' + stores['luma-video'].size);
   console.log('ok trimmed to', stores['luma-video'].size, 'blocks');
 
   // Drive refuses (an expired sign-in): the player gets an error, not wrong bytes.
   stores['luma-video'] = new Map();
   failWith = 401;
   let failed = false;
-  try { await (await request('bytes=0-')).arrayBuffer(); } catch (e) { failed = true; }
+  try {
+    const res = await request('bytes=0-');
+    if (!res.ok) failed = true; // an error status: the player reports it
+    else await res.arrayBuffer();
+  } catch (e) { failed = true; }  // or a broken stream: the same
   assert.ok(failed, 'error not passed on');
   failWith = 0;
   calls = [];
@@ -108,4 +126,9 @@ function expected(range) {
   assert.ok(after.equals(data), 'after an error the blocks download again');
   console.log('ok a refusal reaches the player, and the next try works');
   console.log('ALL PASSED');
+  passed = true;
 })().catch((e) => { console.error('FAILED:', e.message); process.exit(1); });
+
+// A stream that never answers leaves nothing to wait for, and Node just stops: that is a failure.
+let passed = false;
+process.on('exit', () => { if (!passed && !process.exitCode) { console.error('FAILED: stopped early (a read hung)'); process.exitCode = 1; } });
