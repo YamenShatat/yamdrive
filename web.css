@@ -84,6 +84,14 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
 .pq:empty { display: none; }
 .pspeed { width: auto; padding: 0 12px; font-size: 14px; font-weight: 600; }
 
+/* What a click or key just did, flashed in the middle (as YouTube): ▶ ❚❚, "10 s »", "70%", "1.5×". */
+.pflash { position: absolute; left: 50%; top: 50%; z-index: 3; display: flex; align-items: center; gap: 8px; min-width: 76px; height: 76px; padding: 0 22px;
+  justify-content: center; border-radius: 38px; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 20px; pointer-events: none;
+  opacity: 0; transform: translate(-50%, -50%); }
+.pflash svg { width: 34px; height: 34px; fill: currentColor; }
+.pflash.on { animation: pflash 0.7s ease-out; }
+@keyframes pflash { 0% { opacity: 1; transform: translate(-50%, -50%) scale(0.9); } 60% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.15); } }
+
 /* ---- "Continue with Google" (the sign-in lasts an hour) ---- */
 #gate { display: none; position: fixed; left: 0; top: 0; right: 0; bottom: 0; z-index: 60; background: rgba(0, 0, 0, 0.7); align-items: center; justify-content: center; padding: 16px; }
 .gate-box { width: 100%; max-width: 420px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 24px; }

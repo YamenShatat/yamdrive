@@ -656,14 +656,44 @@
     var seek = q('.pslider'), tip = q('.ptip'), vol = q('.pvol'), time = q('.ptime'), qual = q('.pq');
     var playB = q('.pplay'), muteB = q('.pmute'), speedB = q('.pspeed'), fsB = q('.pfs'), pipB = q('.ppip');
     var SPEEDS = [1, 1.25, 1.5, 2, 0.5, 0.75], dragging = false;
+    var RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]; // Shift+< / Shift+> step through these
     p.ctl = q('.pctl');
     p.next2 = q('.pnext2');
     p.prev2 = q('.pprev2');
 
-    function step(s) { if (v.duration) v.currentTime = Math.max(0, Math.min(v.duration - 0.5, v.currentTime + s)); p.wake(); }
-    function toggle() { if (v.paused) v.play(); else v.pause(); }
+    // As YouTube: what a click or key just did flashes in the middle for a moment.
+    var flashEl = document.createElement('div'), jump = 0, jumpAt = 0;
+    flashEl.className = 'pflash';
+    w.appendChild(flashEl);
+    function flash(html) {
+      flashEl.innerHTML = html;
+      flashEl.classList.remove('on');
+      void flashEl.offsetWidth; // restart the animation
+      flashEl.classList.add('on');
+    }
+    function step(s) {
+      if (!v.duration) return;
+      v.currentTime = Math.max(0, Math.min(v.duration - 0.5, v.currentTime + s));
+      // Presses in a row the same way add up on screen: 10 s, 20 s, 30 s.
+      jump = Date.now() - jumpAt < 1000 && (jump > 0) === (s > 0) ? jump + s : s;
+      jumpAt = Date.now();
+      flash('<b>' + (jump > 0 ? Math.abs(jump) + ' s »' : '« ' + Math.abs(jump) + ' s') + '</b>');
+      p.wake();
+    }
+    function toggle() {
+      if (v.paused) v.play(); else v.pause();
+      flash(v.paused ? I.pause : I.play);
+    }
     function full() { if (document.fullscreenElement) document.exitFullscreen(); else w.requestFullscreen().catch(function () {}); }
-    function setVol(x) { v.volume = Math.max(0, Math.min(1, x)); v.muted = v.volume === 0; }
+    function setVol(x) {
+      v.volume = Math.round(Math.max(0, Math.min(1, x)) * 100) / 100;
+      v.muted = v.volume === 0;
+      flash((v.muted ? I.mute : I.vol) + '<b>' + Math.round(v.volume * 100) + '%</b>');
+    }
+    function setSpeed(i) {
+      v.playbackRate = RATES[Math.max(0, Math.min(RATES.length - 1, i))];
+      flash('<b>' + v.playbackRate + '×</b>');
+    }
     function paint() {
       var d = v.duration || 0, t = v.currentTime || 0, b = 0;
       for (var i = 0; i < v.buffered.length; i++) if (v.buffered.start(i) <= t + 1) b = Math.max(b, v.buffered.end(i));
@@ -686,7 +716,11 @@
     q('.pfwd').onclick = function () { step(10); };
     p.next2.onclick = function () { p.next.onclick(); };
     p.prev2.onclick = function () { p.prev.onclick(); };
-    muteB.onclick = function () { v.muted = !v.muted; if (!v.muted && !v.volume) v.volume = 0.5; };
+    muteB.onclick = function () {
+      v.muted = !v.muted;
+      if (!v.muted && !v.volume) v.volume = 0.5;
+      flash(v.muted ? I.mute : I.vol);
+    };
     vol.oninput = function () { setVol(+vol.value); };
     speedB.onclick = function () {
       v.playbackRate = SPEEDS[(SPEEDS.indexOf(v.playbackRate) + 1) % SPEEDS.length];
@@ -738,6 +772,8 @@
       else if (k === 'f' || k === 'F') full();
       else if (k === 'N' && e.shiftKey) p.next.onclick();
       else if (k === 'P' && e.shiftKey) p.prev.onclick();
+      else if (k === '>') setSpeed(RATES.indexOf(v.playbackRate) + 1); // YouTube's Shift+. and Shift+,
+      else if (k === '<') setSpeed(RATES.indexOf(v.playbackRate) - 1);
       else if (/^[0-9]$/.test(k) && v.duration) v.currentTime = v.duration * k / 10;
       else done = false;
       if (done) { e.preventDefault(); e.stopPropagation(); p.wake(); }
@@ -773,8 +809,10 @@
     player.wake = function () {
       wrap.classList.remove('idle');
       clearTimeout(hideTimer);
+      // A computer hides them while paused too (the mouse brings them back); a touch screen
+      // keeps them up while paused. Never while the mouse is on them.
       hideTimer = setTimeout(function () {
-        if (!player.v.paused && !(player.ctl && player.ctl.matches(':hover'))) wrap.classList.add('idle');
+        if ((DESK || !player.v.paused) && !(player.ctl && player.ctl.matches(':hover'))) wrap.classList.add('idle');
       }, 3000);
     };
     wrap.addEventListener('touchstart', player.wake, { passive: true });
@@ -850,6 +888,8 @@
 
   function stop() {
     if (!player || player.wrap.style.display !== 'flex') return;
+    // Closed in full screen (✕, Esc or the end): leave full screen too, not just the player.
+    if (document.fullscreenElement) document.exitFullscreen().catch(function () {});
     saveProgress(false);
     clearInterval(saveTimer);
     player.v.pause();
@@ -971,7 +1011,7 @@
     loadCatalog: function (root, force) {
       load(root, force).then(function () { tell('onCatalog', true, ''); }, function (e) { tell('onCatalog', false, errText(e)); });
     },
-    build: 15, // shown in Settings > About, to tell an old copy kept by Safari from the current one
+    build: 16, // shown in Settings > About, to tell an old copy kept by Safari from the current one
     syncStatus: function () { return ls.get('syncStatus') || ''; },
     api: api,
     url: function (id) { var f = fileOf[id]; return f ? 'stream/' + f.f + '?size=' + f.s : ''; },
