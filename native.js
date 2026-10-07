@@ -809,19 +809,28 @@
     player.wake = function () {
       wrap.classList.remove('idle');
       clearTimeout(hideTimer);
-      // A computer hides them while paused too (the mouse brings them back); a touch screen
-      // keeps them up while paused. Never while the mouse is on them.
+      // Paused, they stay; playing, they go 3 s after the last mouse move, key or tap (never
+      // while the mouse is on them).
       hideTimer = setTimeout(function () {
-        if ((DESK || !player.v.paused) && !(player.ctl && player.ctl.matches(':hover'))) wrap.classList.add('idle');
+        if (!player.v.paused && !(player.ctl && player.ctl.matches(':hover'))) wrap.classList.add('idle');
       }, 3000);
     };
     wrap.addEventListener('touchstart', player.wake, { passive: true });
     wrap.addEventListener('click', player.wake);
     // The mouse brings the controls back: heard on the whole page, first, so nothing on top
     // of the player (an extension's layer, say) can keep it from the player.
-    ['pointermove', 'mousemove', 'wheel'].forEach(function (n) {
-      window.addEventListener(n, function () { if (wrap.style.display === 'flex') player.wake(); }, { capture: true, passive: true });
+    // Only a real move counts: when the controls fade, the browser reports a "move" of the
+    // still mouse at the same spot, which would bring them straight back.
+    var lastX = -1, lastY = -1;
+    ['pointermove', 'mousemove'].forEach(function (n) {
+      window.addEventListener(n, function (e) {
+        if (e.clientX === lastX && e.clientY === lastY) return;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        if (wrap.style.display === 'flex') player.wake();
+      }, { capture: true, passive: true });
     });
+    window.addEventListener('wheel', function () { if (wrap.style.display === 'flex') player.wake(); }, { capture: true, passive: true });
     player.v.addEventListener('play', player.wake);
     player.v.addEventListener('pause', player.wake);
     player.v.addEventListener('ended', onEnded);
@@ -1015,7 +1024,7 @@
     loadCatalog: function (root, force) {
       load(root, force).then(function () { tell('onCatalog', true, ''); }, function (e) { tell('onCatalog', false, errText(e)); });
     },
-    build: 17, // shown in Settings > About, to tell an old copy kept by Safari from the current one
+    build: 18, // shown in Settings > About, to tell an old copy kept by Safari from the current one
     syncStatus: function () { return ls.get('syncStatus') || ''; },
     api: api,
     url: function (id) { var f = fileOf[id]; return f ? 'stream/' + f.f + '?size=' + f.s : ''; },
