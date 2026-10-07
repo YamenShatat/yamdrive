@@ -817,7 +817,11 @@
     };
     wrap.addEventListener('touchstart', player.wake, { passive: true });
     wrap.addEventListener('click', player.wake);
-    wrap.addEventListener('mousemove', player.wake);
+    // The mouse brings the controls back: heard on the whole page, first, so nothing on top
+    // of the player (an extension's layer, say) can keep it from the player.
+    ['pointermove', 'mousemove', 'wheel'].forEach(function (n) {
+      window.addEventListener(n, function () { if (wrap.style.display === 'flex') player.wake(); }, { capture: true, passive: true });
+    });
     player.v.addEventListener('play', player.wake);
     player.v.addEventListener('pause', player.wake);
     player.v.addEventListener('ended', onEnded);
@@ -1011,7 +1015,7 @@
     loadCatalog: function (root, force) {
       load(root, force).then(function () { tell('onCatalog', true, ''); }, function (e) { tell('onCatalog', false, errText(e)); });
     },
-    build: 16, // shown in Settings > About, to tell an old copy kept by Safari from the current one
+    build: 17, // shown in Settings > About, to tell an old copy kept by Safari from the current one
     syncStatus: function () { return ls.get('syncStatus') || ''; },
     api: api,
     url: function (id) { var f = fileOf[id]; return f ? 'stream/' + f.f + '?size=' + f.s : ''; },
