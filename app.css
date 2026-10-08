@@ -234,7 +234,7 @@ h2 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
 .ep { display: flex; align-items: center; padding: 10px; border-radius: 12px; margin-bottom: 6px; background: var(--surface); border: 1px solid var(--line-soft); }
 .ep:active { background: var(--surface-2); }
 /* The text column may shrink, so long plots wrap and file names end in "…" inside the row. */
-.ep > div:last-child { flex: 1; min-width: 0; }
+.ep .tx { flex: 1; min-width: 0; }
 .ep .th { width: 150px; height: 84px; flex: none; border-radius: 8px; overflow: hidden; background: var(--surface-3); margin-right: 16px; position: relative; }
 .ep .th img { width: 100%; height: 100%; object-fit: cover; }
 .ep .no { font-size: 12px; color: var(--fg-3); font-weight: 600; letter-spacing: 0.05em; }
@@ -242,6 +242,14 @@ h2 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
 .ep .fn { font-size: 11.5px; color: var(--fg-3); opacity: 0.7; margin-top: 4px; font-family: ui-monospace, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ep .pl { font-size: 12.5px; color: var(--fg-3); max-height: 36px; overflow: hidden; }
 .ep.last .no { color: var(--accent); }
+/* Downloads (Android app): the percent and buttons at the end of an episode row. */
+.dlbox { display: flex; align-items: center; flex: none; margin-left: 12px; }
+.dlb { width: 46px; height: 46px; border-radius: 23px; display: flex; align-items: center; justify-content: center; margin-left: 8px;
+  color: var(--fg-2); background: var(--surface-2); text-align: center; }
+.dlb.on { color: var(--accent); background: var(--accent-soft); }
+.dlb .ic { width: 22px; height: 22px; }
+.dlp { font-size: 14px; font-weight: 700; color: var(--accent); min-width: 44px; text-align: right; margin-right: 4px; font-variant-numeric: tabular-nums; }
+.dacts .dlp { align-self: center; margin: 0 6px 0 4px; }
 
 /* ---- search ---- */
 .bigsearch { height: 58px; border-radius: 14px; margin-bottom: 14px; }

@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '0.1.0';
+  var VERSION = 'V4';
   var CHUNK = 40; // grid items rendered per step; more are added while scrolling
 
   // In a desktop browser (no Android side) everything still renders, with an empty library.
@@ -66,7 +66,11 @@
     plus: '<path d="M12 5l0 14"/><path d="M5 12l14 0"/>',
     user: '<path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0"/><path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"/>',
     logout: '<path d="M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2"/><path d="M9 12h12l-3 -3"/><path d="M18 15l3 -3"/>',
-    trash: '<path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/>'
+    trash: '<path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/>',
+    download: '<path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"/><path d="M7 11l5 5l5 -5"/><path d="M12 4l0 12"/>',
+    pause: '<path d="M7 5h2a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1v-12a1 1 0 0 1 1 -1"/><path d="M15 5h2a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1v-12a1 1 0 0 1 1 -1"/>',
+    x: '<path d="M18 6l-12 12"/><path d="M6 6l12 12"/>',
+    check: '<path d="M5 12l5 5l10 -10"/>'
   };
   function ic(n, cls) {
     return '<svg class="ic ' + (cls || '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + P[n] + '</svg>';
@@ -632,8 +636,67 @@
     if (!el) return;
     el.innerHTML = (pr ? '<button class="f btn primary" data-act="mplay" data-i="1">' + ic('play') + 'Resume ' + hms(pr.p) + '</button>' +
       '<button class="f btn" data-act="mplay" data-i="0">' + ic('refresh') + 'From start</button>'
-      : '<button class="f btn primary" data-act="mplay" data-i="0">' + ic('play') + 'Play</button>') + listButtons(it);
+      : '<button class="f btn primary" data-act="mplay" data-i="0">' + ic('play') + 'Play</button>') + listButtons(it) +
+      dlButtons(it.id, it.n, true);
   }
+
+  // Downloads (the Android app only; the web has no N.download): an episode or movie kept on
+  // the device, to watch on a slow connection without waiting. It plays while it downloads,
+  // from what is already in, and the rest fills in under it.
+  var DL = !!N.download, dls = {}; // id -> { p: percent, s: "run" | "pause" | "done" }
+  if (DL) { try { dls = JSON.parse(N.downloads()) || {}; } catch (e) { dls = {}; } }
+  // Not downloaded: Download. Downloading: the percent, Pause, Cancel. Paused: the percent,
+  // Resume, Cancel. Done: Downloaded, Delete. "big": the movie page's labelled buttons.
+  function dlButtons(id, title, big) {
+    if (!DL) return '';
+    var d = dls[id], b = big ? 'f btn' : 'f dlb', t = ' data-id="' + id + '" data-t="' + esc(title) + '"';
+    function btn(act, icon, label) {
+      return '<button class="' + b + '" data-act="' + act + '"' + t + ' title="' + label + '">' + ic(icon) + (big ? label : '') + '</button>';
+    }
+    if (!d) return btn('dl', 'download', 'Download');
+    if (d.s === 'done') {
+      return '<span class="' + (big ? 'btn on' : 'dlb on') + '" title="Downloaded">' + ic('check') + (big ? 'Downloaded' : '') + '</span>' +
+        btn('dldel', 'trash', 'Delete download');
+    }
+    return '<span class="dlp">' + (d.p || 0) + '%</span>' +
+      (d.s === 'run' ? btn('dlpause', 'pause', 'Pause') : btn('dl', 'play', 'Resume')) + btn('dlcancel', 'x', 'Cancel');
+  }
+  function paintDl(id) {
+    var box = $('#dl' + id);
+    if (box) box.innerHTML = dlButtons(id, box.getAttribute('data-t'), false);
+    if (cur.v === 'movie' && cur.a && +cur.a.id === +id) movieButtons(cur.a);
+  }
+  ACTS.dl = function (el) {
+    var id = +el.getAttribute('data-id');
+    dls[id] = { p: (dls[id] || {}).p || 0, s: 'run' };
+    N.download(id, el.getAttribute('data-t'));
+    paintDl(id);
+  };
+  ACTS.dlpause = function (el) { N.pauseDownload(+el.getAttribute('data-id')); };
+  ACTS.dlcancel = function (el) {
+    var id = +el.getAttribute('data-id');
+    ask('Cancel this download?', 'What has downloaded so far is deleted.', 'Cancel download', function () { N.deleteDownload(id); });
+  };
+  ACTS.dldel = function (el) {
+    var id = +el.getAttribute('data-id');
+    ask('Delete this download?', 'It is removed from this device. You can still stream it, or download it again.', 'Delete', function () { N.deleteDownload(id); });
+  };
+  // A yes/no question; "yes" runs cb.
+  var askCb = null;
+  function ask(title, text, yes, cb) {
+    askCb = cb;
+    modal.innerHTML = '<div class="sheet dlg"><div class="h">' + esc(title) + '</div><p>' + esc(text) + '</p>' +
+      '<div class="dlg-btns"><button class="f btn danger" data-act="askok">' + esc(yes) + '</button>' +
+      '<button class="f btn" data-act="exitno">Keep it</button></div></div>';
+    showModal();
+    modalCb = function () {};
+  }
+  ACTS.askok = function () {
+    var cb = askCb;
+    askCb = null;
+    closeModal();
+    if (cb) cb();
+  };
   ACTS.mplay = function (el, resume) {
     var it = cur.a, pr = progress['m' + it.id];
     nowPlaying = { item: it };
@@ -716,10 +779,12 @@
       out += '<div class="f ep' + (le && +le.id === +e.id ? ' last' : '') + '" data-act="ep" data-i="' + i + '">' +
         '<div class="th">' + (still ? '<img src="' + esc(still) + '" onerror="this.style.display=\'none\'">' : '') +
         (pr && pr.d ? '<span class="prog"><i style="width:' + Math.round(100 * pr.p / pr.d) + '%"></i></span>' : '') + '</div>' +
-        '<div><div class="no">EPISODE ' + esc(e.episode_num) + (inf.duration ? ' · ' + esc(inf.duration) : '') +
+        '<div class="tx"><div class="no">EPISODE ' + esc(e.episode_num) + (inf.duration ? ' · ' + esc(inf.duration) : '') +
         (pr && pr.d ? ' · ' + Math.max(1, Math.round((pr.d - pr.p) / 60000)) + ' min left' : '') + '</div>' +
         '<div class="nm" dir="auto">' + esc(e.title || 'Episode ' + e.episode_num) + '</div><div class="pl" dir="auto">' + esc(inf.plot || '') + '</div>' +
-        (e.file_name ? '<div class="fn" dir="auto">' + esc(e.file_name) + '</div>' : '') + '</div></div>';
+        (e.file_name ? '<div class="fn" dir="auto">' + esc(e.file_name) + '</div>' : '') + '</div>' +
+        (DL ? '<div class="dlbox" id="dl' + e.id + '" data-t="' + esc(cur.a.n + ' S' + showState.season + ' E' + e.episode_num) + '">' +
+          dlButtons(e.id, cur.a.n + ' S' + showState.season + ' E' + e.episode_num, false) + '</div>' : '') + '</div>';
     });
     $('#eps').innerHTML = out || '<div class="spin">No episodes in this season.</div>';
   }
@@ -1139,6 +1204,14 @@
     },
     // Played to the very end: a finished series leaves Continue watching (a finished movie
     // leaves by itself, since its resume point is removed).
+    // A download moved on: percent, state ("run", "pause", "done", or "none" once deleted).
+    onDownload: function (id, percent, state, error) {
+      if (state === 'none') delete dls[id];
+      else dls[id] = { p: percent, s: state };
+      paintDl(id);
+      if (error) toast(error);
+      else if (state === 'done') toast('Downloaded');
+    },
     onEnded: function () {
       if (nowPlaying && nowPlaying.eps) dropCw(nowPlaying.item);
     },
