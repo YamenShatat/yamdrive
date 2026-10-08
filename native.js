@@ -61,23 +61,40 @@
       })();
     });
   }
-  // Google's sign-in window; the first time it asks for the account and consent, later it is a blink.
-  function requestToken() {
-    return gisLoaded().then(function () {
-      return new Promise(function (res, rej) {
-        google.accounts.oauth2.initTokenClient({
-          client_id: CLIENT, scope: SCOPE,
-          callback: function (r) {
-            if (r.error) { rej(new Error(r.error_description || r.error)); return; }
-            setToken(r.access_token, +r.expires_in);
-            res(token);
-          },
-          error_callback: function (e) {
-            rej(new Error(e && e.type === 'popup_closed' ? 'Sign-in was cancelled.' : 'Sign-in failed: ' + ((e && (e.message || e.type)) || 'unknown')));
-          }
-        }).requestAccessToken({ prompt: '' });
-      });
+  // Google's sign-in window; the first time it asks for the account and consent, later it is a
+  // blink. One client, made as soon as Google's script is in, so a tap can open the window at
+  // once, inside the tap: Safari and pop-up blockers only allow it there.
+  var client = null, asking = null; // asking: the { res, rej } of the window open now
+  function gisClient() {
+    if (client || !(window.google && google.accounts && google.accounts.oauth2)) return client;
+    client = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT, scope: SCOPE,
+      callback: function (r) {
+        var a = asking;
+        asking = null;
+        if (!a) return;
+        if (r.error) { a.rej(new Error(r.error_description || r.error)); return; }
+        setToken(r.access_token, +r.expires_in);
+        a.res(token);
+      },
+      error_callback: function (e) {
+        var a = asking;
+        asking = null;
+        if (a) a.rej(new Error(e && e.type === 'popup_closed' ? 'Sign-in was cancelled.' : 'Sign-in failed: ' + ((e && (e.message || e.type)) || 'unknown')));
+      }
     });
+    return client;
+  }
+  gisLoaded().then(gisClient, function () { /* said when signing in */ });
+  function openGoogle() {
+    return new Promise(function (res, rej) {
+      if (asking) asking.rej(new Error('Sign-in was cancelled.')); // an older window, given up
+      asking = { res: res, rej: rej };
+      gisClient().requestAccessToken({ prompt: '' });
+    });
+  }
+  function requestToken() {
+    return gisClient() ? openGoogle() : gisLoaded().then(openGoogle);
   }
 
   // A current token. When it has expired, Safari only lets a tap open Google's window, so this
@@ -106,6 +123,35 @@
       }, function (e) { askToContinue(errText(e) + ' Tap Continue to try again.'); });
     };
   }
+
+  // Renewing before the hour is up: in its last 10 minutes, the next tap, click or key renews
+  // the sign-in in that same moment (Google opens its window only right after one; already
+  // allowed, the window closes by itself), so the "Continue" box does not come up. While a
+  // video plays on untouched, a note asks for that tap.
+  var RENEW_MS = 10 * 60 * 1000, renewing = false, note = null;
+  function renewDue() { return tokenOk() && tokenExp - Date.now() < RENEW_MS; }
+  function renewNow() {
+    if (renewing || waiters || !renewDue() || !gisClient()) return;
+    renewing = true;
+    openGoogle().then(function () { renewing = false; showNote(false); }, function () { renewing = false; });
+  }
+  ['click', 'touchend', 'keydown'].forEach(function (n) { window.addEventListener(n, renewNow, true); });
+  // In the player (so it shows in full screen too). The tap on it renews (renewNow above) without
+  // pausing the video, as a tap on the video itself would on a computer.
+  function showNote(on) {
+    if (!on) { if (note) note.style.display = 'none'; return; }
+    if (!note) {
+      note = document.createElement('button');
+      note.className = 'renew';
+      note.textContent = 'Tap here to stay signed in';
+      note.onclick = function (e) { e.stopPropagation(); };
+    }
+    if (note.parentNode !== player.wrap) player.wrap.appendChild(note);
+    note.style.display = '';
+  }
+  setInterval(function () {
+    showNote(!!player && player.wrap.style.display === 'flex' && renewDue() && !renewing);
+  }, 15000);
 
   // ---------- Drive REST ----------
 
@@ -1024,7 +1070,7 @@
     loadCatalog: function (root, force) {
       load(root, force).then(function () { tell('onCatalog', true, ''); }, function (e) { tell('onCatalog', false, errText(e)); });
     },
-    build: 19, // shown in Settings > About, to tell an old copy kept by Safari from the current one
+    build: 20, // shown in Settings > About, to tell an old copy kept by Safari from the current one
     syncStatus: function () { return ls.get('syncStatus') || ''; },
     api: api,
     url: function (id) { var f = fileOf[id]; return f ? 'stream/' + f.f + '?size=' + f.s : ''; },
