@@ -712,8 +712,8 @@
     var w = p.wrap, v = p.v, q = function (s) { return w.querySelector(s); };
     var seek = q('.pslider'), tip = q('.ptip'), vol = q('.pvol'), time = q('.ptime'), qual = q('.pq');
     var playB = q('.pplay'), muteB = q('.pmute'), speedB = q('.pspeed'), fsB = q('.pfs'), pipB = q('.ppip');
-    var SPEEDS = [1, 1.25, 1.5, 2, 0.5, 0.75], dragging = false;
-    var RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]; // Shift+< / Shift+> step through these
+    // The speed list (as the tablet app's); Shift+< / Shift+> step through it too.
+    var SPEEDS = [1, 1.5, 2, 3, 4], RATES = SPEEDS, dragging = false;
     p.ctl = q('.pctl');
     p.next2 = q('.pnext2');
     p.prev2 = q('.pprev2');
@@ -791,10 +791,45 @@
       };
       vol.oninput = function () { setVol(+vol.value); };
     }
+    // The speed button opens a list; a choice, or a tap anywhere else, closes it.
+    var menu = document.createElement('div');
+    menu.className = 'pmenu';
+    menu.innerHTML = SPEEDS.map(function (s) { return '<button data-s="' + s + '">' + s + '×</button>'; }).join('');
+    w.appendChild(menu);
+    p.menu = menu;
     speedB.onclick = function () {
-      v.playbackRate = SPEEDS[(SPEEDS.indexOf(v.playbackRate) + 1) % SPEEDS.length];
-      speedB.textContent = v.playbackRate + '×';
+      [].forEach.call(menu.children, function (b) { b.classList.toggle('on', +b.getAttribute('data-s') === v.playbackRate); });
+      menu.classList.toggle('open');
     };
+    menu.onclick = function (e) {
+      var b = e.target.closest('button');
+      if (b) v.playbackRate = +b.getAttribute('data-s');
+      menu.classList.remove('open');
+    };
+    w.addEventListener('click', function (e) {
+      if (!menu.classList.contains('open') || e.target.closest('.pmenu, .pspeed')) return;
+      menu.classList.remove('open');
+      e.stopPropagation(); // that tap only closes the list
+    }, true);
+
+    // Held: 2× until let go (a finger on the video, or Space on a computer), then the speed before.
+    var holdEl = document.createElement('div'), held = false, holdRate = 1, spaceDown = false;
+    holdEl.className = 'phold';
+    holdEl.innerHTML = '<b>2×</b>' + I.next;
+    w.appendChild(holdEl);
+    function hold(on) {
+      if (on === held || (on && v.paused)) return;
+      held = on;
+      if (on) holdRate = v.playbackRate;
+      v.playbackRate = on ? 2 : holdRate;
+      holdEl.classList.toggle('on', on);
+    }
+    window.addEventListener('keyup', function (e) {
+      if (e.key !== ' ' || w.style.display !== 'flex') return;
+      e.preventDefault();
+      if (held) hold(false); else if (spaceDown) toggle(); // a short press: play / pause
+      spaceDown = false;
+    }, true);
     fsB.onclick = full;
     if (pipB && document.pictureInPictureEnabled) {
       pipB.onclick = function () { (document.pictureInPictureElement ? document.exitPictureInPicture() : v.requestPictureInPicture()).catch(function () {}); };
@@ -834,7 +869,9 @@
     window.addEventListener('keydown', function (e) {
       if (w.style.display !== 'flex' || e.ctrlKey || e.metaKey || e.altKey) return;
       var k = e.key, done = true;
-      if (k === ' ' || k === 'k' || k === 'K') toggle();
+      // Space acts when let go (keyup above): held down, the key repeats and that is 2×.
+      if (k === ' ') { if (e.repeat) hold(true); else spaceDown = true; }
+      else if (k === 'k' || k === 'K') toggle();
       else if (k === 'ArrowLeft' || k === 'j' || k === 'J') step(-10);
       else if (k === 'ArrowRight' || k === 'l' || k === 'L') step(10);
       else if (k === 'ArrowUp') setVol(v.volume + 0.1);
@@ -857,9 +894,19 @@
 
     // Touch, as the tablet: a tap shows or hides the controls; a double tap on the right half
     // goes 10 s on, on the left half 10 s back, and more taps in a row add 10 s each.
-    var tapAt = 0, tapTimer = 0, skipAt = 0, skipDir = 0;
+    var tapAt = 0, tapTimer = 0, skipAt = 0, skipDir = 0, holdT = 0, wasHeld = false;
+    v.addEventListener('pointerdown', function () {
+      wasHeld = false;
+      clearTimeout(holdT);
+      holdT = setTimeout(function () { if (!v.paused) { hold(true); wasHeld = true; } }, 500);
+    });
+    ['pointerup', 'pointercancel'].forEach(function (n) {
+      v.addEventListener(n, function () { clearTimeout(holdT); hold(false); });
+    });
+    v.addEventListener('contextmenu', function (e) { e.preventDefault(); }); // a long press is 2×
     v.addEventListener('click', function (e) {
       e.stopPropagation(); // not the player's "any tap shows the controls"
+      if (wasHeld) { wasHeld = false; return; } // the end of a hold, not a tap
       var r = v.getBoundingClientRect(), dir = e.clientX - r.left < r.width / 2 ? -1 : 1, now = Date.now();
       if (now - tapAt < 300 || (now - skipAt < 1000 && dir === skipDir)) {
         clearTimeout(tapTimer);
@@ -926,7 +973,7 @@
       // Paused, they stay; playing, they go 3 s after the last mouse move, key or tap (never
       // while the mouse is on them).
       hideTimer = setTimeout(function () {
-        if (!player.v.paused && !(DESK && player.ctl.matches(':hover'))) wrap.classList.add('idle');
+        if (!player.v.paused && !(DESK && player.ctl.matches(':hover')) && !player.menu.classList.contains('open')) wrap.classList.add('idle');
       }, 3000);
     };
     if (DESK) wrap.addEventListener('touchstart', player.wake, { passive: true }); // a touch laptop
@@ -1139,7 +1186,7 @@
     loadCatalog: function (root, force) {
       load(root, force).then(function () { tell('onCatalog', true, ''); }, function (e) { tell('onCatalog', false, errText(e)); });
     },
-    build: 21, // shown in Settings > About, to tell an old copy kept by Safari from the current one
+    build: 22, // shown in Settings > About, to tell an old copy kept by Safari from the current one
     syncStatus: function () { return ls.get('syncStatus') || ''; },
     api: api,
     url: function (id) { var f = fileOf[id]; return f ? 'stream/' + f.f + '?size=' + f.s : ''; },

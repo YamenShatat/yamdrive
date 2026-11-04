@@ -85,7 +85,8 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
 
 /* ---- touch player (iPhone, Android phones), as the tablet app: big -10 / play / +10 in the
    middle; a tap shows or hides the controls; a double tap skips (native.js) ---- */
-#player.touch video { touch-action: manipulation; } /* no double-tap zoom */
+/* No double-tap zoom, no page scroll, and a long press is 2× (not Safari's "save video" menu). */
+#player.touch video { touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 .pmid { position: absolute; left: 50%; top: 50%; z-index: 2; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 44px;
   transition: opacity 0.25s; pointer-events: none; }
 .pmid .pb { pointer-events: auto; width: 60px; height: 60px; border-radius: 30px; background: rgba(0, 0, 0, 0.45); }
@@ -116,3 +117,15 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
 .gate-box .h { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
 .gate-box p { color: var(--fg-2); margin: 0 0 20px; font-size: 15px; }
 .gate-box .btn { margin: 0; }
+
+/* The speed list, over the bottom right; and "2× ▶▶" at the top while a finger or Space holds 2×. */
+.pmenu { position: absolute; right: calc(16px + env(safe-area-inset-right)); bottom: calc(66px + env(safe-area-inset-bottom)); z-index: 5;
+  display: none; flex-direction: column; min-width: 110px; padding: 6px; border-radius: 12px; background: rgba(24, 24, 24, 0.94); }
+.pmenu.open { display: flex; }
+.pmenu button { padding: 11px 16px; border-radius: 8px; color: #fff; font-size: 15px; text-align: left; }
+.pmenu button.on { color: var(--accent); font-weight: 700; }
+.desk .pmenu button:hover { background: rgba(255, 255, 255, 0.12); }
+.phold { position: absolute; left: 50%; top: calc(64px + env(safe-area-inset-top)); z-index: 3; transform: translateX(-50%);
+  display: none; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 20px; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 16px; pointer-events: none; }
+.phold.on { display: flex; }
+.phold svg { width: 18px; height: 18px; fill: currentColor; }
