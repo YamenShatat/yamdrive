@@ -44,36 +44,27 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
 }
 #player.idle .pbar { opacity: 0; pointer-events: none; }
 #player .ptitle { flex: 1; min-width: 0; color: #fff; font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#player .pnav { flex: none; height: 40px; padding: 0 14px; margin-left: 8px; border-radius: 20px; background: rgba(255, 255, 255, 0.12); color: #fff; font-size: 14px; font-weight: 600; white-space: nowrap; }
+#player .pnav { display: none; }
 #player .pclose { margin-left: 8px; }
-/* Narrow phone upright: shorter labels so the title keeps some room. */
-@media (max-width: 480px) {
-  #player .pnav { padding: 0 12px; font-size: 13px; }
-  #player .pprev { font-size: 0; }
-  #player .pprev:before { content: "‹ Prev"; font-size: 13px; }
-  #player .pnext { font-size: 0; }
-  #player .pnext:before { content: "Next ›"; font-size: 13px; }
-}
 #player .pclose { flex: none; width: 44px; height: 44px; border-radius: 22px; background: rgba(255, 255, 255, 0.12); color: #fff; font-size: 18px; text-align: center; }
-#player video { flex: 1; min-height: 0; width: 100%; height: 100%; padding-bottom: env(safe-area-inset-bottom); }
+#player video { flex: 1; min-height: 0; width: 100%; height: 100%; }
 
-/* ---- computer player (native.js desk): controls over the bottom of the video ---- */
-#player.desk .pnav { display: none; }
+/* ---- our player (native.js desk): controls over the bottom of the video; touch further down ---- */
 #player.desk.idle { cursor: none; }
-#player.desk video { padding-bottom: 0; }
-.pctl { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 30px 18px 10px; background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.8)); transition: opacity 0.25s; color: #fff; }
+.pctl { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
+  padding: 30px calc(18px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(18px + env(safe-area-inset-left)); background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.8)); transition: opacity 0.25s; color: #fff; }
 #player.idle .pctl { opacity: 0; pointer-events: none; }
 .pseek { position: relative; height: 18px; display: flex; align-items: center; }
 .pctl input[type=range] { -webkit-appearance: none; appearance: none; margin: 0; height: 4px; border-radius: 2px; cursor: pointer; outline: none;
   background: linear-gradient(to right, var(--accent) var(--p, 0%), rgba(255, 255, 255, 0.45) var(--p, 0%), rgba(255, 255, 255, 0.45) var(--b, 0%), rgba(255, 255, 255, 0.2) var(--b, 0%)); }
 .pctl input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); border: 0; }
 .pslider { width: 100%; }
-.pseek:hover .pslider { height: 6px; }
+.desk .pseek:hover .pslider { height: 6px; }
 .ptip { position: absolute; bottom: 20px; transform: translateX(-50%); padding: 3px 7px; border-radius: 6px; background: rgba(0, 0, 0, 0.85); font-size: 12px; display: none; pointer-events: none; }
-.pseek:hover .ptip { display: block; }
+.desk .pseek:hover .ptip { display: block; }
 .prow { display: flex; align-items: center; margin-top: 6px; }
 .pb { width: 42px; height: 42px; border-radius: 21px; color: #fff; display: flex; align-items: center; justify-content: center; flex: none; }
-.pb:hover { background: rgba(255, 255, 255, 0.14); }
+.desk .pb:hover { background: rgba(255, 255, 255, 0.14); }
 .pb svg { width: 24px; height: 24px; fill: currentColor; }
 .pvol { width: 90px; margin: 0 14px 0 4px !important;
   background: linear-gradient(to right, #fff var(--p, 0%), rgba(255, 255, 255, 0.3) var(--p, 0%)) !important; }
@@ -91,6 +82,28 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
 .pflash svg { width: 34px; height: 34px; fill: currentColor; }
 .pflash.on { animation: pflash 0.7s ease-out; }
 @keyframes pflash { 0% { opacity: 1; transform: translate(-50%, -50%) scale(0.9); } 60% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.15); } }
+
+/* ---- touch player (iPhone, Android phones), as the tablet app: big -10 / play / +10 in the
+   middle; a tap shows or hides the controls; a double tap skips (native.js) ---- */
+#player.touch video { touch-action: manipulation; } /* no double-tap zoom */
+.pmid { position: absolute; left: 50%; top: 50%; z-index: 2; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 44px;
+  transition: opacity 0.25s; pointer-events: none; }
+.pmid .pb { pointer-events: auto; width: 60px; height: 60px; border-radius: 30px; background: rgba(0, 0, 0, 0.45); }
+.pmid .pb svg { width: 34px; height: 34px; }
+.pmid .pplay { position: relative; width: 78px; height: 78px; border-radius: 39px; }
+.pmid .pplay svg { width: 42px; height: 42px; }
+#player.idle .pmid { opacity: 0; }
+#player.idle .pmid .pb { pointer-events: none; }
+/* Loading: a turning ring round play, also while the controls are hidden. */
+#player.wait .pmid { opacity: 1; }
+#player.wait .pplay::after { content: ""; position: absolute; left: -6px; top: -6px; right: -6px; bottom: -6px; border-radius: 50%;
+  border: 3px solid transparent; border-top-color: var(--accent); animation: pspin 0.8s linear infinite; }
+@keyframes pspin { to { transform: rotate(360deg); } }
+#player.touch .pseek { height: 34px; touch-action: none; }
+#player.touch .pslider { height: 5px; pointer-events: none; }
+#player.touch .pslider::-webkit-slider-thumb { width: 18px; height: 18px; }
+#player.touch .prow { margin-top: 0; }
+#player.touch .ptime { margin: 0 4px; }
 
 /* "Tap here to stay signed in": over a video in the last 10 minutes of the sign-in's hour. */
 .renew { position: absolute; left: 50%; top: calc(70px + env(safe-area-inset-top)); z-index: 4; transform: translateX(-50%);

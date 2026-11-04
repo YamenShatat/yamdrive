@@ -655,8 +655,8 @@
 
   var player = null, spec = null, idx = 0, currentId = null, saveTimer = 0;
 
-  // A computer (mouse) gets yamDRIVE's own controls; touch screens keep the browser's, which
-  // know their full screen and gestures best.
+  // A computer (mouse) gets the YouTube-like controls; touch screens (iPhone, Android phones)
+  // the tablet app's: big -10 / play / +10 in the middle, double tap to skip.
   var DESK = matchMedia('(hover: hover) and (pointer: fine)').matches;
   function svg(d) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + d + '</svg>'; }
   var LINE = 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
@@ -687,6 +687,16 @@
     '<button class="pb pspeed" title="Playback speed">1×</button>' +
     '<button class="pb ppip" title="Picture in picture">' + I.pip + '</button>' +
     '<button class="pb pfs" title="Full screen (F)">' + I.full + '</button></div></div>';
+  // Touch: as the tablet app. No volume (the phone's buttons), no picture in picture.
+  var TOUCH = '<div class="pmid"><button class="pb pback" aria-label="Back 10 seconds">' + I.back + '</button>' +
+    '<button class="pb pplay" aria-label="Play / pause">' + I.play + '</button>' +
+    '<button class="pb pfwd" aria-label="Forward 10 seconds">' + I.fwd + '</button></div>' +
+    '<div class="pctl"><div class="pseek"><input type="range" class="pslider" min="0" max="1000" step="1" value="0" aria-label="Seek" tabindex="-1"><div class="ptip"></div></div>' +
+    '<div class="prow"><button class="pb pprev2" aria-label="Previous episode">' + I.prev + '</button>' +
+    '<span class="ptime">0:00 / 0:00</span>' +
+    '<button class="pb pnext2" aria-label="Next episode">' + I.next + '</button><span class="pfill"></span>' +
+    '<span class="pq"></span><button class="pb pspeed">1×</button>' +
+    '<button class="pb pfs" aria-label="Full screen">' + I.full + '</button></div></div>';
 
   function clock(s) {
     s = Math.max(0, Math.floor(s || 0));
@@ -696,7 +706,8 @@
 
   // The computer controls: seek bar (with what is loaded, and the time under the mouse), play,
   // ±10 s, episodes, volume, time, the file's quality, speed, picture in picture, full screen,
-  // and the keyboard (Space/K, ←/→ or J/L, ↑/↓, M, F, Shift+N/P, 0-9).
+  // and the keyboard (Space/K, ←/→ or J/L, ↑/↓, M, F, Shift+N/P, 0-9). Touch has fewer of these
+  // (TOUCH) and its own taps, at the end.
   function desk(p) {
     var w = p.wrap, v = p.v, q = function (s) { return w.querySelector(s); };
     var seek = q('.pslider'), tip = q('.ptip'), vol = q('.pvol'), time = q('.ptime'), qual = q('.pq');
@@ -711,11 +722,15 @@
     var flashEl = document.createElement('div'), jump = 0, jumpAt = 0;
     flashEl.className = 'pflash';
     w.appendChild(flashEl);
+    var flashT = 0;
     function flash(html) {
       flashEl.innerHTML = html;
       flashEl.classList.remove('on');
       void flashEl.offsetWidth; // restart the animation
       flashEl.classList.add('on');
+      // Done: off, or the player's next opening would play it again.
+      clearTimeout(flashT);
+      flashT = setTimeout(function () { flashEl.classList.remove('on'); }, 800);
     }
     function step(s) {
       if (!v.duration) return;
@@ -724,13 +739,18 @@
       jump = Date.now() - jumpAt < 1000 && (jump > 0) === (s > 0) ? jump + s : s;
       jumpAt = Date.now();
       flash('<b>' + (jump > 0 ? Math.abs(jump) + ' s »' : '« ' + Math.abs(jump) + ' s') + '</b>');
-      p.wake();
+      // A double tap shows it on its own side (as the tablet) and leaves the controls as they are.
+      flashEl.style.left = DESK ? '' : s < 0 ? '25%' : '75%';
+      if (DESK) p.wake();
     }
     function toggle() {
       if (v.paused) v.play(); else v.pause();
       flash(v.paused ? I.pause : I.play);
+      flashEl.style.left = '';
     }
+    // iPhone has no full screen for a page part (only Safari's own player): no button there.
     function full() { if (document.fullscreenElement) document.exitFullscreen(); else w.requestFullscreen().catch(function () {}); }
+    if (!w.requestFullscreen) fsB.style.display = 'none';
     function setVol(x) {
       v.volume = Math.round(Math.max(0, Math.min(1, x)) * 100) / 100;
       v.muted = v.volume === 0;
@@ -749,6 +769,7 @@
       time.textContent = clock(dragging ? seek.value / 1000 * d : t) + ' / ' + clock(d);
     }
     function paintVol() {
+      if (!vol) return; // touch
       vol.value = v.muted ? 0 : v.volume;
       vol.style.setProperty('--p', vol.value * 100 + '%');
       muteB.innerHTML = v.muted || !v.volume ? I.mute : I.vol;
@@ -762,22 +783,26 @@
     q('.pfwd').onclick = function () { step(10); };
     p.next2.onclick = function () { p.next.onclick(); };
     p.prev2.onclick = function () { p.prev.onclick(); };
-    muteB.onclick = function () {
-      v.muted = !v.muted;
-      if (!v.muted && !v.volume) v.volume = 0.5;
-      flash(v.muted ? I.mute : I.vol);
-    };
-    vol.oninput = function () { setVol(+vol.value); };
+    if (vol) {
+      muteB.onclick = function () {
+        v.muted = !v.muted;
+        if (!v.muted && !v.volume) v.volume = 0.5;
+        flash(v.muted ? I.mute : I.vol);
+      };
+      vol.oninput = function () { setVol(+vol.value); };
+    }
     speedB.onclick = function () {
       v.playbackRate = SPEEDS[(SPEEDS.indexOf(v.playbackRate) + 1) % SPEEDS.length];
       speedB.textContent = v.playbackRate + '×';
     };
     fsB.onclick = full;
-    if (document.pictureInPictureEnabled) {
+    if (pipB && document.pictureInPictureEnabled) {
       pipB.onclick = function () { (document.pictureInPictureElement ? document.exitPictureInPicture() : v.requestPictureInPicture()).catch(function () {}); };
-    } else pipB.style.display = 'none';
-    v.addEventListener('click', toggle);
-    v.addEventListener('dblclick', full);
+    } else if (pipB) pipB.style.display = 'none';
+    if (DESK) {
+      v.addEventListener('click', toggle);
+      v.addEventListener('dblclick', full);
+    }
 
     // Seek bar: the picture moves when the mouse is let go (each jump is a new Drive request).
     seek.addEventListener('pointerdown', function () { dragging = true; });
@@ -814,7 +839,7 @@
       else if (k === 'ArrowRight' || k === 'l' || k === 'L') step(10);
       else if (k === 'ArrowUp') setVol(v.volume + 0.1);
       else if (k === 'ArrowDown') setVol(v.volume - 0.1);
-      else if (k === 'm' || k === 'M') muteB.onclick();
+      else if ((k === 'm' || k === 'M') && muteB) muteB.onclick();
       else if (k === 'f' || k === 'F') full();
       else if (k === 'N' && e.shiftKey) p.next.onclick();
       else if (k === 'P' && e.shiftKey) p.prev.onclick();
@@ -824,17 +849,60 @@
       else done = false;
       if (done) { e.preventDefault(); e.stopPropagation(); p.wake(); }
     }, true);
+
+    // Loading (start, a jump, a slow connection): a ring turns around the middle play button.
+    v.addEventListener('waiting', function () { w.classList.add('wait'); });
+    ['playing', 'pause', 'canplay', 'emptied'].forEach(function (n) { v.addEventListener(n, function () { w.classList.remove('wait'); }); });
+    if (DESK) return;
+
+    // Touch, as the tablet: a tap shows or hides the controls; a double tap on the right half
+    // goes 10 s on, on the left half 10 s back, and more taps in a row add 10 s each.
+    var tapAt = 0, tapTimer = 0, skipAt = 0, skipDir = 0;
+    v.addEventListener('click', function (e) {
+      e.stopPropagation(); // not the player's "any tap shows the controls"
+      var r = v.getBoundingClientRect(), dir = e.clientX - r.left < r.width / 2 ? -1 : 1, now = Date.now();
+      if (now - tapAt < 300 || (now - skipAt < 1000 && dir === skipDir)) {
+        clearTimeout(tapTimer);
+        step(dir * 10);
+        skipAt = now;
+        skipDir = dir;
+        tapAt = 0;
+        return;
+      }
+      tapAt = now;
+      tapTimer = setTimeout(function () {
+        if (w.classList.contains('idle')) p.wake(); else w.classList.add('idle');
+      }, 300);
+    });
+
+    // Seek bar: the finger anywhere on it (a phone's slider only moves by its small knob).
+    var bar = q('.pseek');
+    function at(e) {
+      var r = seek.getBoundingClientRect();
+      seek.value = Math.round(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * 1000);
+      paint();
+      p.wake();
+    }
+    bar.addEventListener('pointerdown', function (e) { dragging = true; bar.setPointerCapture(e.pointerId); at(e); });
+    bar.addEventListener('pointermove', function (e) { if (dragging) at(e); });
+    bar.addEventListener('pointerup', function () {
+      if (!dragging) return;
+      dragging = false;
+      if (v.duration) v.currentTime = seek.value / 1000 * v.duration;
+    });
+    bar.addEventListener('pointercancel', function () { dragging = false; paint(); });
   }
 
   function playerEl() {
     if (player) return player;
     var wrap = document.createElement('div');
     wrap.id = 'player';
-    if (DESK) wrap.className = 'desk';
+    wrap.className = DESK ? 'desk' : 'touch';
+    // .pnav: hidden; the controls' own previous/next buttons press them.
     wrap.innerHTML = '<div class="pbar"><div class="ptitle"></div>' +
       '<button class="pnav pprev">‹ Previous</button><button class="pnav pnext">Next episode ›</button>' +
       '<button class="pclose" aria-label="Close">✕</button></div>' +
-      '<video playsinline ' + (DESK ? '' : 'controls ') + 'autoplay preload="auto"></video>' + (DESK ? CONTROLS : '');
+      '<video playsinline autoplay preload="auto"></video>' + (DESK ? CONTROLS : TOUCH);
     document.body.appendChild(wrap);
     player = {
       wrap: wrap, v: wrap.querySelector('video'), title: wrap.querySelector('.ptitle'),
@@ -858,17 +926,18 @@
       // Paused, they stay; playing, they go 3 s after the last mouse move, key or tap (never
       // while the mouse is on them).
       hideTimer = setTimeout(function () {
-        if (!player.v.paused && !(player.ctl && player.ctl.matches(':hover'))) wrap.classList.add('idle');
+        if (!player.v.paused && !(DESK && player.ctl.matches(':hover'))) wrap.classList.add('idle');
       }, 3000);
     };
-    wrap.addEventListener('touchstart', player.wake, { passive: true });
+    if (DESK) wrap.addEventListener('touchstart', player.wake, { passive: true }); // a touch laptop
     wrap.addEventListener('click', player.wake);
     // The mouse brings the controls back: heard on the whole page, first, so nothing on top
     // of the player (an extension's layer, say) can keep it from the player.
     // Only a real move counts: when the controls fade, the browser reports a "move" of the
-    // still mouse at the same spot, which would bring them straight back.
+    // still mouse at the same spot, which would bring them straight back. Not on touch: a phone
+    // reports a "move" with every tap, which would undo a tap that hides them.
     var lastX = -1, lastY = -1;
-    ['pointermove', 'mousemove'].forEach(function (n) {
+    if (DESK) ['pointermove', 'mousemove'].forEach(function (n) {
       window.addEventListener(n, function (e) {
         if (e.clientX === lastX && e.clientY === lastY) return;
         lastX = e.clientX;
@@ -881,7 +950,7 @@
     player.v.addEventListener('pause', player.wake);
     player.v.addEventListener('ended', onEnded);
     player.v.addEventListener('error', onError);
-    if (DESK) desk(player);
+    desk(player);
     return player;
   }
 
@@ -1070,7 +1139,7 @@
     loadCatalog: function (root, force) {
       load(root, force).then(function () { tell('onCatalog', true, ''); }, function (e) { tell('onCatalog', false, errText(e)); });
     },
-    build: 20, // shown in Settings > About, to tell an old copy kept by Safari from the current one
+    build: 21, // shown in Settings > About, to tell an old copy kept by Safari from the current one
     syncStatus: function () { return ls.get('syncStatus') || ''; },
     api: api,
     url: function (id) { var f = fileOf[id]; return f ? 'stream/' + f.f + '?size=' + f.s : ''; },
