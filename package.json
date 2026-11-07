@@ -1,0 +1,33 @@
+{
+  "name": "yamdrive",
+  "productName": "yamDRIVE",
+  "version": "1.0.0",
+  "description": "yamDRIVE for Windows",
+  "author": "Yamen Shatat",
+  "private": true,
+  "main": "desktop/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.yamen.yamdrive",
+    "files": [
+      "desktop/**",
+      "icon-512.png"
+    ],
+    "win": {
+      "icon": "icon-512.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "yamDRIVE"
+    }
+  },
+  "devDependencies": {
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
+  }
+}
