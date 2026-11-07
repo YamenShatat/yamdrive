@@ -1160,12 +1160,29 @@
 
   // ---------- the calls app.js makes ----------
 
+  // Chrome, Edge and Brave offer to install the site as an app (its own window and icon, in the
+  // Start menu and on the desktop); the Settings button shows that offer. Safari has none.
+  var installOffer = null;
+  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); installOffer = e; });
+  window.addEventListener('appinstalled', function () { installOffer = null; });
+
   window.Native = {
+    canInstall: function () { return !!installOffer; },
+    install: function () {
+      if (!installOffer) return;
+      installOffer.prompt();
+      installOffer.userChoice.then(function (c) { if (c.outcome === 'accepted') installOffer = null; });
+    },
     play: play,
     stop: stop,
     // "Exit yamDRIVE?" → Yes: leave the site, back to the page before it (a page cannot close
     // its own tab). Two steps: the spare entry, then the app's own.
-    exit: function () { spare = true; history.go(-2); },
+    // Installed on a computer (its own window): close that window instead.
+    exit: function () {
+      if (matchMedia('(display-mode: standalone)').matches && DESK) { window.close(); return; }
+      spare = true;
+      history.go(-2);
+    },
     toast: function () { /* app.js shows its own */ },
     get: function (k) { return ls.get(k); },
     set: function (k, v) {
@@ -1186,7 +1203,7 @@
     loadCatalog: function (root, force) {
       load(root, force).then(function () { tell('onCatalog', true, ''); }, function (e) { tell('onCatalog', false, errText(e)); });
     },
-    build: 22, // shown in Settings > About, to tell an old copy kept by Safari from the current one
+    build: 23, // shown in Settings > About, to tell an old copy kept by Safari from the current one
     syncStatus: function () { return ls.get('syncStatus') || ''; },
     api: api,
     url: function (id) { var f = fileOf[id]; return f ? 'stream/' + f.f + '?size=' + f.s : ''; },

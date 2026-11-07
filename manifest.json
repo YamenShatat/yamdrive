@@ -1,5 +1,7 @@
 {
+  "id": "./",
   "name": "yamDRIVE",
+  "description": "Movies and series from your Google Drive",
   "short_name": "yamDRIVE",
   "start_url": "./",
   "scope": "./",

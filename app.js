@@ -927,12 +927,16 @@
       '<button class="f btn danger" data-act="clear" data-f="favs">' + ic('trash') + 'Clear favorites</button>' +
       '<button class="f btn danger" data-act="clear" data-f="later">' + ic('trash') + 'Clear watch later</button>' +
       '<button class="f btn danger" data-act="clear" data-f="cw">' + ic('trash') + 'Clear watching now</button></div>' +
+      // The web on a computer (Chrome, Edge, Brave): install as an app with its own icon and window.
+      (N.canInstall && N.canInstall() ? '<h2>App</h2><div class="panel">' +
+        '<button class="f btn" data-act="install">' + ic('download') + 'Install yamDRIVE on this computer</button></div>' : '') +
       '<h2>About</h2><div class="panel">' +
       '<div class="kv"><b>yamDRIVE</b> ' + VERSION + (N.build ? ' · web build ' + N.build : '') + '</div>' +
       '<div class="kv"><b>Details</b> This product uses the TMDB API but is not endorsed or certified by TMDB.</div>' +
       '<div class="kv"><b>Library</b> ' + (catalogReady ? num(counts.m) + ' movies · ' + num(counts.s) + ' series' : 'loading…') + '</div></div></div>';
     settle(r);
   };
+  ACTS.install = function () { N.install(); };
   ACTS.refresh = function () {
     if (!acct) return;
     cats = {}; lists = {};
