@@ -1160,7 +1160,23 @@
 
   // ---------- the calls app.js makes ----------
 
+  // Settings > Device. The Windows program knows the real RAM and disk (desktop/preload.js); a
+  // browser only an approximate RAM size (Chrome, Edge, Brave) and the storage this site may use.
+  function device() {
+    var d = {}, desk = window.yamDesktop;
+    if (navigator.deviceMemory) d.ramTotal = navigator.deviceMemory * 1073741824;
+    Promise.all([
+      desk ? desk.device() : null,
+      navigator.storage && navigator.storage.estimate ? navigator.storage.estimate() : null
+    ]).then(function (r) {
+      if (r[0]) d = r[0];
+      else if (r[1]) { d.siteUsed = r[1].usage; d.siteQuota = r[1].quota; }
+      tell('onDevice', JSON.stringify(d));
+    }, function () { tell('onDevice', JSON.stringify(d)); });
+  }
+
   window.Native = {
+    device: device,
     play: play,
     stop: stop,
     // "Exit yamDRIVE?" → Yes: leave the site, back to the page before it (a page cannot close
@@ -1191,7 +1207,7 @@
     loadCatalog: function (root, force) {
       load(root, force).then(function () { tell('onCatalog', true, ''); }, function (e) { tell('onCatalog', false, errText(e)); });
     },
-    build: 24, // shown in Settings > About, to tell an old copy kept by Safari from the current one
+    build: 25, // shown in Settings > About, to tell an old copy kept by Safari from the current one
     syncStatus: function () { return ls.get('syncStatus') || ''; },
     api: api,
     url: function (id) { var f = fileOf[id]; return f ? 'stream/' + f.f + '?size=' + f.s : ''; },

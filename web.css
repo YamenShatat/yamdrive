@@ -48,6 +48,9 @@ body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-ins
 #player .pclose { margin-left: 8px; }
 #player .pclose { flex: none; width: 44px; height: 44px; border-radius: 22px; background: rgba(255, 255, 255, 0.12); color: #fff; font-size: 18px; text-align: center; }
 #player video { flex: 1; min-height: 0; width: 100%; height: 100%; }
+/* Not quite opaque: Windows then never draws the video on its own layer, which in full screen
+   covered the controls of high-quality files (the movies). Invisible to the eye. */
+#player video { opacity: 0.999; }
 
 /* ---- our player (native.js desk): controls over the bottom of the video; touch further down ---- */
 #player.desk.idle { cursor: none; }

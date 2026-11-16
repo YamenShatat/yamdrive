@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var VERSION = 'V4';
+  var VERSION = 'V5';
   var CHUNK = 40; // grid items rendered per step; more are added while scrolling
 
   // In a desktop browser (no Android side) everything still renders, with an empty library.
@@ -927,12 +927,23 @@
       '<button class="f btn danger" data-act="clear" data-f="favs">' + ic('trash') + 'Clear favorites</button>' +
       '<button class="f btn danger" data-act="clear" data-f="later">' + ic('trash') + 'Clear watch later</button>' +
       '<button class="f btn danger" data-act="clear" data-f="cw">' + ic('trash') + 'Clear watching now</button></div>' +
+      // Filled by App.onDevice (the host answers N.device()).
+      '<h2>Device</h2><div class="panel" id="devinfo"><div class="kv">Checking…</div></div>' +
       '<h2>About</h2><div class="panel">' +
       '<div class="kv"><b>yamDRIVE</b> ' + VERSION + (N.build ? ' · web build ' + N.build : '') + '</div>' +
       '<div class="kv"><b>Details</b> This product uses the TMDB API but is not endorsed or certified by TMDB.</div>' +
       '<div class="kv"><b>Library</b> ' + (catalogReady ? num(counts.m) + ' movies · ' + num(counts.s) + ' series' : 'loading…') + '</div></div></div>';
     settle(r);
+    if (N.device) N.device();
   };
+  // Settings > Device: RAM and storage, free and used of all, refreshed while Settings is open.
+  function bytes(b) { return b >= 1073741824 ? (b / 1073741824).toFixed(1) + ' GB' : Math.round(b / 1048576) + ' MB'; }
+  function meter(name, free, total, note) {
+    var used = Math.max(0, total - free);
+    return '<div class="kv"><b>' + name + '</b> ' + bytes(free) + ' free · ' + bytes(used) + ' / ' + bytes(total) + ' used' +
+      (note ? ' · ' + note : '') + '</div><div class="meter"><i style="width:' + Math.min(100, Math.round(used / total * 100)) + '%"></i></div>';
+  }
+  setInterval(function () { if (cur.v === 'settings' && N.device) N.device(); }, 5000);
   ACTS.refresh = function () {
     if (!acct) return;
     cats = {}; lists = {};
@@ -1195,6 +1206,18 @@
         hist = [];
         show('home', null, null);
       });
+    },
+    // {ramFree, ramTotal, diskFree, diskTotal, videos} from the apps and the Windows program; a
+    // browser gives only an approximate ramTotal and the storage this site may use (siteUsed, siteQuota).
+    onDevice: function (json) {
+      var el = $('#devinfo'), d, h = '';
+      if (!el) return;
+      try { d = JSON.parse(json) || {}; } catch (e) { d = {}; }
+      if (d.ramTotal) h += d.ramFree != null ? meter('RAM', d.ramFree, d.ramTotal)
+        : '<div class="kv"><b>RAM</b> about ' + bytes(d.ramTotal) + ' (this browser does not tell how much is free)</div>';
+      if (d.diskTotal) h += meter('Storage', d.diskFree, d.diskTotal, d.videos != null ? 'yamDRIVE videos ' + bytes(d.videos) : '');
+      else if (d.siteQuota) h += meter('Storage for yamDRIVE', d.siteQuota - d.siteUsed, d.siteQuota);
+      el.innerHTML = h || '<div class="kv">This browser does not share these numbers.</div>';
     },
     onPlayerError: function (msg) { toast('Playback failed. ' + msg); },
     // The player moved to another item of the playlist (next/previous episode, or on its own).
