@@ -668,7 +668,7 @@
   }
   ACTS.dl = function (el) {
     var id = +el.getAttribute('data-id');
-    dls[id] = { p: (dls[id] || {}).p || 0, s: 'run' };
+    dls[id] = { p: (dls[id] || {}).p || 0, s: 'run', t: el.getAttribute('data-t') };
     N.download(id, el.getAttribute('data-t'));
     paintDl(id);
   };
@@ -680,17 +680,6 @@
   ACTS.dldel = function (el) {
     var id = +el.getAttribute('data-id');
     ask('Delete this download?', 'It is removed from this device. You can still stream it, or download it again.', 'Delete', function () { N.deleteDownload(id); });
-  };
-  // Settings > Data: everything downloaded on this device, also the ones still downloading or paused.
-  ACTS.dlall = function () {
-    var ids = Object.keys(dls);
-    if (!ids.length) { toast('Nothing is downloaded on this device.'); return; }
-    ask('Delete all ' + ids.length + ' download' + (ids.length > 1 ? 's' : '') + '?',
-      'Every downloaded movie and episode is removed from this device, also the ones still downloading. You can still stream them, or download them again.',
-      'Delete all', function () {
-        each(ids, function (id) { N.deleteDownload(+id); });
-        toast('Downloads deleted');
-      });
   };
   // A yes/no question; "yes" runs cb.
   var askCb = null;
@@ -938,7 +927,7 @@
       '<button class="f btn danger" data-act="clear" data-f="favs">' + ic('trash') + 'Clear favorites</button>' +
       '<button class="f btn danger" data-act="clear" data-f="later">' + ic('trash') + 'Clear watch later</button>' +
       '<button class="f btn danger" data-act="clear" data-f="cw">' + ic('trash') + 'Clear watching now</button>' +
-      (DL ? '<button class="f btn danger" data-act="dlall">' + ic('trash') + 'Delete all downloads</button>' : '') + '</div>' +
+      (DL ? '<button class="f btn danger" data-act="clear" data-f="dl">' + ic('trash') + 'Delete downloads</button>' : '') + '</div>' +
       // Filled by App.onDevice (the host answers N.device()).
       '<h2>Device</h2><div class="panel" id="devinfo"><div class="kv">Checking…</div></div>' +
       '<h2>About</h2><div class="panel">' +
@@ -985,18 +974,26 @@
   var MGR = {
     favs: { title: 'Favorites', list: function () { return favs; } },
     later: { title: 'Watch later', list: function () { return later; } },
-    cw: { title: 'Watching now', list: function () { reloadWatch(); return cwItems('m').concat(cwItems('s')); } }
+    cw: { title: 'Watching now', list: function () { reloadWatch(); return cwItems('m').concat(cwItems('s')); } },
+    // Downloads on this device (Android): movies and episodes, also ones still downloading.
+    // An episode's title is always "<show> S<n> E<n>" (playEpisode's list builds it so).
+    dl: { title: 'Downloads', kinds: ['', 'm', 'e'], verb: 'Delete', list: function () {
+      return Object.keys(dls).map(function (id) {
+        var d = dls[id], t = d.t || 'Video ' + id;
+        return { k: /\sS\d+ E\d+$/.test(t) ? 'e' : 'm', id: +id, n: t + (d.s === 'done' ? '' : ' · ' + (d.p || 0) + '%') };
+      });
+    } }
   };
-  var KIND_NAME = { m: 'Movie', s: 'Series' };
+  var KIND_NAME = { m: 'Movie', s: 'Series', e: 'Episode' };
   var mgr = null;
   ACTS.clear = function (el) {
     var f = el.getAttribute('data-f'), def = MGR[f];
-    mgr = { f: f, all: def.list().slice(), q: '', kind: '', sel: {}, shown: [] };
+    mgr = { f: f, all: def.list().slice(), q: '', kind: '', sel: {}, shown: [], kinds: def.kinds || ['', 'm', 's'], verb: def.verb || 'Clear' };
     modal.innerHTML = '<div class="sheet mgr"><div class="h">' + esc(def.title) + '</div>' +
       searchBox('mq', 'Search by name…') + '<div class="chips" id="mchips"></div>' +
       '<div class="opts scroller" id="mlist"></div><div class="dlg-btns">' +
       '<button class="f btn" data-act="mall" id="mall">Select all</button>' +
-      '<button class="f btn danger" data-act="mclear" id="mclear">Clear selected (0)</button>' +
+      '<button class="f btn danger" data-act="mclear" id="mclear">' + mgr.verb + ' selected (0)</button>' +
       '<button class="f btn" data-act="mclose">Cancel</button></div></div>';
     showModal();
     modalCb = function () {};
@@ -1006,7 +1003,7 @@
   };
   function mgrList() {
     var q = mgr.q.trim().toLowerCase(), chips = '', rows = '';
-    each(['', 'm', 's'], function (k) {
+    each(mgr.kinds, function (k) {
       var n = 0;
       each(mgr.all, function (it) { if (!k || it.k === k) n++; });
       chips += '<button class="f chip' + (mgr.kind === k ? ' on' : '') + '" data-act="mkind" data-f="' + k + '">' +
@@ -1029,7 +1026,7 @@
     var n = 0, all = mgr.shown.length > 0;
     for (var k in mgr.sel) if (mgr.sel.hasOwnProperty(k)) n++;
     each(mgr.shown, function (it) { if (!mgr.sel[keyOf(it)]) all = false; });
-    $('#mclear').textContent = 'Clear selected (' + n + ')';
+    $('#mclear').textContent = mgr.verb + ' selected (' + n + ')';
     $('#mall').textContent = all ? 'Unselect all' : 'Select all';
   }
   ACTS.mrow = function (el) {
@@ -1054,7 +1051,8 @@
     var sel = mgr.sel, n = 0;
     function keep(it) { return !sel[keyOf(it)]; }
     for (var k in sel) if (sel.hasOwnProperty(k)) n++;
-    if (!n) { toast('Tick something to clear first.'); return; }
+    if (!n) { toast('Tick something to ' + mgr.verb.toLowerCase() + ' first.'); return; }
+    if (mgr.f === 'dl') each(mgr.all, function (it) { if (!keep(it)) N.deleteDownload(it.id); });
     if (mgr.f === 'favs') { favs = favs.filter(keep); store.set('favs', favs); }
     if (mgr.f === 'later') { later = later.filter(keep); store.set('later', later); }
     if (mgr.f === 'cw') {
@@ -1252,7 +1250,7 @@
     // A download moved on: percent, state ("run", "pause", "done", or "none" once deleted).
     onDownload: function (id, percent, state, error) {
       if (state === 'none') delete dls[id];
-      else dls[id] = { p: percent, s: state };
+      else dls[id] = { p: percent, s: state, t: (dls[id] || {}).t };
       paintDl(id);
       if (error) toast(error);
       else if (state === 'done') toast('Downloaded');
