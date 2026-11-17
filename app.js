@@ -934,16 +934,26 @@
       '<div class="kv"><b>Details</b> This product uses the TMDB API but is not endorsed or certified by TMDB.</div>' +
       '<div class="kv"><b>Library</b> ' + (catalogReady ? num(counts.m) + ' movies · ' + num(counts.s) + ' series' : 'loading…') + '</div></div></div>';
     settle(r);
-    if (N.device) N.device();
+    liveDevice();
   };
-  // Settings > Device: RAM and storage, free and used of all, live while Settings is open.
+  // Settings > Device: RAM and storage, free and used of all.
   function bytes(b) { return b >= 1073741824 ? (b / 1073741824).toFixed(1) + ' GB' : Math.round(b / 1048576) + ' MB'; }
   function meter(name, free, total, note) {
     var used = Math.max(0, total - free);
     return '<div class="kv"><b>' + name + '</b> ' + bytes(free) + ' free · ' + bytes(used) + ' / ' + bytes(total) + ' used' +
       (note ? ' · ' + note : '') + '</div><div class="meter"><i style="width:' + Math.min(100, Math.round(used / total * 100)) + '%"></i></div>';
   }
-  setInterval(function () { if (cur.v === 'settings' && N.device) N.device(); }, 1000); // live, every second
+  // Live while Settings is open: every second, from opening it until another page is shown.
+  var devTimer = 0;
+  function liveDevice() {
+    clearInterval(devTimer);
+    if (!N.device) return;
+    N.device();
+    devTimer = setInterval(function () {
+      if (cur.v === 'settings') N.device();
+      else clearInterval(devTimer); // left Settings: stopped until it opens again
+    }, 1000);
+  }
   ACTS.refresh = function () {
     if (!acct) return;
     cats = {}; lists = {};
