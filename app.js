@@ -980,7 +980,10 @@
     dl: { title: 'Downloads', kinds: ['', 'm', 'e'], verb: 'Delete', list: function () {
       return Object.keys(dls).map(function (id) {
         var d = dls[id], t = d.t || 'Video ' + id;
-        return { k: /\sS\d+ E\d+$/.test(t) ? 'e' : 'm', id: +id, n: t + (d.s === 'done' ? '' : ' · ' + (d.p || 0) + '%') };
+        return { k: /\sS\d+ E\d+$/.test(t) ? 'e' : 'm', id: +id, t: t, n: t + (d.s === 'done' ? '' : ' · ' + (d.p || 0) + '%') };
+      }).sort(function (a, b) {
+        // A to Z by name; a show's episodes in order (numbers compared as numbers: E2 before E10).
+        return a.t.localeCompare(b.t, undefined, { numeric: true, sensitivity: 'base' });
       });
     } }
   };
