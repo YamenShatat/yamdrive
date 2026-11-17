@@ -936,14 +936,14 @@
     settle(r);
     if (N.device) N.device();
   };
-  // Settings > Device: RAM and storage, free and used of all, refreshed while Settings is open.
+  // Settings > Device: RAM and storage, free and used of all, live while Settings is open.
   function bytes(b) { return b >= 1073741824 ? (b / 1073741824).toFixed(1) + ' GB' : Math.round(b / 1048576) + ' MB'; }
   function meter(name, free, total, note) {
     var used = Math.max(0, total - free);
     return '<div class="kv"><b>' + name + '</b> ' + bytes(free) + ' free · ' + bytes(used) + ' / ' + bytes(total) + ' used' +
       (note ? ' · ' + note : '') + '</div><div class="meter"><i style="width:' + Math.min(100, Math.round(used / total * 100)) + '%"></i></div>';
   }
-  setInterval(function () { if (cur.v === 'settings' && N.device) N.device(); }, 5000);
+  setInterval(function () { if (cur.v === 'settings' && N.device) N.device(); }, 1000); // live, every second
   ACTS.refresh = function () {
     if (!acct) return;
     cats = {}; lists = {};
