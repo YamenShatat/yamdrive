@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  var VERSION = 'V5';
+  var VERSION = 'V6';
   var CHUNK = 40; // grid items rendered per step; more are added while scrolling
 
   // In a desktop browser (no Android side) everything still renders, with an empty library.
@@ -681,6 +681,17 @@
     var id = +el.getAttribute('data-id');
     ask('Delete this download?', 'It is removed from this device. You can still stream it, or download it again.', 'Delete', function () { N.deleteDownload(id); });
   };
+  // Settings > Data: everything downloaded on this device, also the ones still downloading or paused.
+  ACTS.dlall = function () {
+    var ids = Object.keys(dls);
+    if (!ids.length) { toast('Nothing is downloaded on this device.'); return; }
+    ask('Delete all ' + ids.length + ' download' + (ids.length > 1 ? 's' : '') + '?',
+      'Every downloaded movie and episode is removed from this device, also the ones still downloading. You can still stream them, or download them again.',
+      'Delete all', function () {
+        each(ids, function (id) { N.deleteDownload(+id); });
+        toast('Downloads deleted');
+      });
+  };
   // A yes/no question; "yes" runs cb.
   var askCb = null;
   function ask(title, text, yes, cb) {
@@ -926,7 +937,8 @@
       '<h2>Data</h2><div class="panel">' +
       '<button class="f btn danger" data-act="clear" data-f="favs">' + ic('trash') + 'Clear favorites</button>' +
       '<button class="f btn danger" data-act="clear" data-f="later">' + ic('trash') + 'Clear watch later</button>' +
-      '<button class="f btn danger" data-act="clear" data-f="cw">' + ic('trash') + 'Clear watching now</button></div>' +
+      '<button class="f btn danger" data-act="clear" data-f="cw">' + ic('trash') + 'Clear watching now</button>' +
+      (DL ? '<button class="f btn danger" data-act="dlall">' + ic('trash') + 'Delete all downloads</button>' : '') + '</div>' +
       // Filled by App.onDevice (the host answers N.device()).
       '<h2>Device</h2><div class="panel" id="devinfo"><div class="kv">Checking…</div></div>' +
       '<h2>About</h2><div class="panel">' +
